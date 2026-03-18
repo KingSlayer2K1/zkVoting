@@ -1,0 +1,18 @@
+node_modules/
+backend/node_modules/
+
+# Environment files
+.env
+backend/.env
+
+# Circuit build artifacts and proving keys
+circuits/build/
+circuits/keys/
+
+# Proof artifacts
+proof/
+public/
+
+# Logs
+*.log
+

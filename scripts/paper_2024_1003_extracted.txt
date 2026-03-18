@@ -1,0 +1,2322 @@
+zkV oting: Zero-knowledge proof based coercion-resistant and E2E verifiable
+e-voting system
+Seongho Park
+Hanyang University
+Seoul, Republic of Korea
+seonghopark@hanyang.ac.kr
+Jaekyoung Choi
+Zkrypto
+Seoul, Republic of Korea
+cjk@zkrypto.com
+Jihye Kim
+Kookmin University
+Seoul, Republic of Korea
+jihyek@kookmin.ac.kr
+Hyunok Oh
+Hanyang University
+Seoul, Republic of Korea
+hoh@hanyang.ac.kr
+Abstract—We introduce zkV oting, a coercion-resistant e-voting
+system that utilizes a fake keys approach based on a novel
+nullifiable commitment scheme. This scheme allows voters to
+receive both real and fake commitment keys from a registrar.
+Each ballot includes this commitment, but only the tallier
+can efficiently discern the fake ballots, simplifying the tally
+process to O(n) and ensuring coercion resistance. zkV otingalso
+preserves voter anonymity by ensuring each ballot conceals the
+voter’s identity. Additionally, by integrating zero-knowledge
+proofs, zkV oting achieves end-to-end (E2E) verifiability. We
+formally prove its security and demonstrate its practicality
+for real-world applications, with a ballot casting time of 2.3
+seconds and a tally time of 3.9 milliseconds per ballot.
+1. Introduction
+Remote electronic voting (e-voting) systems enhance
+efficiency and accessibility but face significant privacy chal-
+lenges, such as voter coercion. Adversaries may compel
+voters to favor specific candidates, abstain, or vote un-
+der supervision, eroding fundamental democratic principles.
+Moreover, verifiability is indispensable in e-voting systems.
+Extensive research has explored verifiability criteria, high-
+lighting its importance in ensuring election integrity [1]–
+[10]. While all ballots are published on the (public) bulletin
+board, individual verifiability allows voters to confirm that
+their ballots are posted as intended. Universal verifiability
+permits anyone to validate the tally results. End-to-end
+(E2E) verifiability assures voters that their votes are cast
+as intended, recorded as cast, and tallied as recorded.
+Various e-voting systems designed to ensure coercion
+resistance and verifiability have been proposed [11]–[14].
+The initial method to counteract coercion introduced by
+Juels, Catalano, and Jakobsson [11] (JCJ), employs fake
+credentials. This technique allows voters to create multiple
+fake credentials along with their genuine ones, enabling
+them to submit spurious ballots to mislead coercers. This
+strategy assumes that: 1) no coercion attacks occur during
+the registration phase; 2) voters can securely store and
+conceal cryptographic keys; and 3) they can convincingly lie
+if coerced. The JCJ system [11], as implemented in Civitas
+[12], requires a trusted registrar and tallier to ensure coercion
+resistance. The time complexity of the tally phase, driven
+by the plaintext equivalence test (PET) [15], is O
+
+nb2
+,
+where nb denotes the total number of ballots. The system
+provides universal verifiability, predicated on the assumption
+of a trusted registrar.
+Another approach involves revoting, where voters cast
+ballots multiple times using the same credentials, as ex-
+plored in recent studies [13], [14], [16]. This method as-
+sumes that: 1) voters possess inalienable authentication to
+cast ballots; and 2) there is a designated period for revoting
+after potential coercion. Systems based on this approach
+require the additional assumption of a trusted voting server
+to ensure coercion resistance. V oteAgain [14] achieves co-
+ercion resistance with the aid of a trusted registrar, voting
+server, and tallier, and it reduces the time complexity of
+the tally phase to O(nb log nb). Meanwhile, Loki [16] in-
+troduces a mechanism for flexible vote updating, eliminating
+the need for a specific revoting period post-coercion. This
+system attains coercion resistance through reliance on a
+trusted voting server and tallier, with a tally time complexity
+of O(nv), where nv denotes the number of voters. In Loki,
+voters and the trusted voting server collaboratively manage a
+shared list of real ballots, periodically re-randomizing each
+voter’s latest or second-to-last ballot to thwart coercion. This
+approach, akin to employing fake credentials, encourages
+voters to deceive coercers about their true ballot list. How-
+ever, it demands considerable computational resources from
+the voting server for re-randomizing ballots, which poses
+scalability challenges in large-scale elections.
+We introduce zkVoting, a coercion-resistant e-voting sys-
+tem that advances from the traditional fake credentials ap-
+proach to an innovative fake keys method. Central to this
+system is the newly introduced "nullifiable commitment
+scheme," a novel cryptographic building block conceptu-
+alized for the first time in this paper. In this scheme, a
+trusted entity equipped with a master secret key issues both
+real and fake commitment keys to voters. Each voter is
+allowed only one real commitment key but may receive
+any number of fake keys. Each key, whether real or fake,
+serves as a component of a casting key, enabling a voter
+to cast a single ballot. In scenarios of coercion, a voter
+may use a fake key to cast a vote. The trusted entity can
+perform a nullification operation using the master secret key,
+where ballots committed with a real key retain their value,
+whereas those committed with a fake key are transformed
+to open with a zero value. This capability allows the trusted
+entity to efficiently identify and disregard ballots containing
+fake keys, significantly streamlining the tallying process and
+reducing computational complexity to O(nb).
+This architecture allows zkVoting to ensure end-to-end
+(E2E) verifiability without the need to trust the registrar,
+marking a significant divergence from most existing sys-
+tems that rely on a shared secret voting key for coercion
+resistance. Unlike traditional systems [11], [14], [16] where
+the relationship between the voter and registrar typically
+requires trust to achieve verifiability, zkVoting constrains the
+registrar’s role to ensuring privacy-related aspects such as
+ballot secrecy and coercion resistance. The unique setup
+of the casting key, comprising the voter’s secret key and
+a commitment key (either real or fake), further underpins
+this trust architecture. The voter independently generates and
+retains the secret key, and the registrar, accessing only the
+voter’s public key information, issues the commitment key.
+This arrangement allows the registrar to distinguish between
+real and fake keys but prevents it from casting votes due to
+the absence of access to the secret key.
+To address potential ballot stuffing and ensure the in-
+tegrity of the voting process, the registrar must also provide
+proof that the number of real keys issued matches the total
+number of eligible voters. This verification is facilitated
+by integrating a homomorphic property into the nullifiable
+commitment scheme, which permits the aggregation of com-
+mitments, each corresponding to the number of eligible
+voters after a nullifying process. The homomorphic nature of
+the commitment also simplifies the proof of tally results for
+universal verifiability and allows greater flexibility in choos-
+ing encryption schemes beyond homomorphic encryption.
+1.1. Contributions
+Our main contributions are as follows:
+• We introduce a novel concept of a nullifiable commit-
+ment scheme. We formally define nullifiable encryption
+schemes, construct an efficient homomorphic nullifiable
+commitment scheme, and prove its security under the
+discrete log and decisional Diffie-Hellman assumptions.
+• We present the security definitions of e-voting systems
+including coercion resistance in KTV [17] which is the
+enhanced model presented from JCJ [11]. We also present
+the security properties of individual verifiability, universal
+verifiability, E2E verifiability, eligibility verifiability, and
+voter anonymity.
+• We develop a compiler to construct zkVoting, a coercion-
+resistant E2E verifiable e-voting system utilizing a homo-
+morphic nullifiable commitment scheme and basic crypto-
+graphic building blocks. This system enables voters to cast
+indistinguishable fake ballots, evading coercion. It simpli-
+fies the tallying process with a linear time complexity and
+proves the result with a constant time and size complexity.
+• We provide security proofs for our e-voting system com-
+piled under the security assumptions of hybrid encryp-
+tions, nullifiable commitments, collision-resistant hash
+functions, and zero-knowledge proof systems. Our system
+ensures coercion resistance, E2E verifiability, eligibility
+verifiability, and voter anonymity, requiring weaker trust
+assumptions compared to prior works.
+• We construct zkVoting, leveraging an efficient homomor-
+phic nullifiable commitment. Our performance evaluation
+shows remarkable efficiency: ballot generation with a
+zero-knowledge proof in 2.3 seconds on a smartphone,
+ballot decryption in 3.9 ms per ballot, and tally proof gen-
+eration in 360 ms on a server. Note that ballot decryption
+can be performed in parallel, further enhancing the tally
+efficiency.
+• We incorporate a mechanism to detect malfunctioning
+devices using any trusted device. Upon casting a ballot,
+a receipt is issued to verify the proper functioning of
+the voter’s device. The receipt contains the serial number
+(which locates its transaction in the blockchain) and the
+symmetric key (used for encrypting the message). Using
+any trusted device, the voter can confirm whether their
+ballot has been accurately cast as intended by decrypting
+the transaction and whether there are no duplicate ballots
+by checking the serial number. Note that this receipt is
+meaningful only to the voter who knows the real/fake key
+information.
+1.2. Security properties in e-voting systems
+Before discussing previous e-voting systems, we outline
+the fundamental properties of a secure e-voting system,
+as defined in existing literature [1]–[8], [11], [17], [18].
+The security properties of an e-voting system are primarily
+categorized into privacy and verifiability and defined as
+follows:
+• Ballot privacy (BP) : a ballot does not reveal the voter’s
+choice.
+• Voter anonymity(V A) : a ballot does not reveal the identity
+of voters.
+• Receipt freeness(RF) : a voter is not able to prove their
+choice.
+• Coercion resistance(CR) : a voter is able to cast a vote
+despite any influence.
+• Individual verifiability(IV) : a voter must be able to verify
+their ballot containing their vote is included on the bulletin
+board.
+• Universal verifiability (UV) : anyone must be able to
+verify the tally result represents all the ballots on the
+bulletin board.
+• End-to-end verifiability(E2E V) : a voter can identify their
+unique ballot in a certain way and verify their ballot is
+cast-as-intended, their choice is recorded-as-cast and the
+result is tallied-as-recorded.
+• Eligibility verifiability(EV) : anyone can verify the ballot
+is generated only from eligible voters with a voting right
+and all voters cast at most one vote.
+2
+TABLE 1: Security comparison of e-voting systems : He-
+lios [19], BeleniosRF [20], Provotum [21], JCJ [11], Civi-
+tas [12], V oteAgain [14], Loki [16], and our zkVoting.
+Properties [19] [20] [21] [11]/
+[12] [14] [16] zkVoting
+BP ! ! ! ! ! ! !
+V A ✗ ✗ ✗ ! ! ✗ !
+RF ✗ ! ✗ ! ! ! !
+CR ✗ ✗ ✗ ! ! ! !
+IV ! ! ! ✗ ! ! !
+UV ! ! ! ! ! ! !
+E2E V ! ✗ ! ✗ ! ! !
+EV ✗ ! ! ! ! ! !
+1.3. Related work
+Table 1 presents and compares the evaluation results
+of previous e-voting systems [11], [12], [14], [19]–[21],
+assessed based on the criteria outlined in §1.2. Some studies
+prioritizing coercion resistance often fall short of ensuring
+verifiability. On the other hand, research focusing on verifi-
+ability sometimes does so at the expense of privacy.
+The most well-known e-voting system is Helios [19].
+Helios presumes all voters to be honest and operates under
+the assumption of low coercion environments. However,
+Helios ensures E2E verifiability by issuing the receipt of
+the ballot. BeleniosRF [20] aims to achieve receipt freeness
+and E2E verifiability by improving Helios. However, the
+authority is responsible for key distribution and thus needs
+to be fully trusted. The authority with users’ secret keys not
+only compromises voter anonymity but can also generate a
+proxy ballot before the voter creates their ballot. Eligibil-
+ity verifiability is asserted by fully trusting the authority.
+Provotum [21] is a blockchain-based e-voting protocol that
+provides E2E verifiability, with voters keeping the transac-
+tion hash of the block. A trusted third party is responsible
+for verifying the eligibility of voters. Consequently, only
+eligible voters can cast a ballot, thereby ensuring eligibility
+verifiability. However, it does not guarantee receipt freeness
+and coercion resistance.
+We provide a detailed analysis of various coercion-
+resistant e-voting systems in Table 2, including those uti-
+lizing fake credentials [11], [12] and those based on the
+revoting approach [14], [16]. Systems that employ the fake
+credentials approach exhibit high time complexity during
+the tally phase. In contrast, systems utilizing the revoting
+approach introduce a significant assumption: the necessity
+of a new trusted party. Specifically, V oteAgain requires a
+trusted tally server, and Loki depends on a trusted voting
+server.
+JCJ [11] is the first coercion resistance e-voting system
+simultaneously achieving individual, universal, and eligibil-
+ity verifiability. Civitas [12] is the implementation of the JCJ
+protocol. Its approach involves the use of fake credentials
+to deceive a coercer and requires extra computations to
+differentiate whether the ballot was generated with a fake
+credential which takes O
+
+nb2
+computations where nb is
+the number of ballots.
+The other approach to achieve coercion resistance is
+enabling voters to re-vote using the same credential called
+revoting. V oteAgain [14] claims that using one credential
+and allowing revoting can achieve coercion resistance with
+E2E and eligibility verifiability. It reduces the time com-
+plexity to O(nb log nb) for the tally server to filter the
+genuine ballots among nb total ballots. However, it requires
+the strong assumption that all entities participating in the
+election should be trusted to ensure coercion resistance [22].
+Loki [16] is the latest coercion-resistant voting system
+introducing a new paradigm called flexible vote updating
+which is built upon the revoting approach allowing voters
+to revote but eliminating the conventional assumption that
+voters require a specific period to revote after being coerced.
+Instead, voters and the trusted voting server confidentially
+share the intentions of voters. Loki demonstrates a time
+complexity of O(nv), and E2E verifiability with an honest
+registrar. Nonetheless, Loki is applicable only for small-
+scale voting scenarios, since it receives revoted ballots or re-
+randomizes ballots for all voters every period. Additionally,
+each ballot contains the identity of the voter, which does
+TABLE 2: Detailed security comparison of coercion-resistant e-voting systems where nb is the number of ballots and nv is
+the number of voters. All systems require a trusted bulletin board.
+JCJ [11] / Civitas [12] V oteAgain [14] Loki [16] zkVoting
+Trusted party
+for Verifiability registrar registrar registrar none
+Trusted party
+for BP registrar, tallier registrar, tallier registrar, tallier registrar, tallier
+Trusted party
+for V A registrar, tallier registrar not ensured none
+Trusted party
+for CR registrar, tallier registrar,
+voting server, tallier voting server, tallier registrar, tallier
+Paradigm
+for CR fake credentials revoting flexible vote updating fake keys
+Time complexity
+for the tally phase O
+
+n2
+b
+
+O(nb log nb) O(nv) O(nb)
+3
+not provide voter anonymity.
+1.4. Outline
+The remainder of this paper is organized as follows:
+Section 2 defines the notion of a nullifiable commitment
+scheme with homomorphism and instantiates a homomor-
+phic nullifiable commitment scheme. Section 3 formally
+defines an e-voting system and its associated security prop-
+erties. In Section 4, we propose zkVoting, a secure generic e-
+voting system using a homomorphic nullifiable commitment
+scheme and prove its security. We also instantiate a specific
+construction of zkVoting. Section 5 offers evaluations and
+discussions. Finally, Section 6 wraps up our study.
+2. Nullifiable commitment
+We introduce a novel concept named nullifiable com-
+mitment schemes. In this commitment scheme, a manager
+who has a master secret key and a master public key pair
+issues a commitment key. This commitment key can be
+either a real or a fake commitment key which is indis-
+tinguishable. Using the master secret key, the commitment
+can be nullified, which transforms the commitment into
+an alternative form of a commitment. Specifically, after
+nullified, the new commitment generated from a fake key
+is opened with a zero message while one from a real key
+is opened with the original message. We distinguish the
+nullifiable commitment key ck∗ from the standard real/fake
+commitment keys ck, where ck∗ is exclusively used to open
+all nullified commitments. While multiple ck’s can be issued
+as requested by the user, after being nullified by a manager,
+each commitment can be opened with a unique nullifiable
+commitment key ck∗.
+In nullifiable commitment schemes, the manager, upon
+generating a master key pair, issues commitment keys to the
+user. To ensure the integrity of key issuance, the manager
+interacts with the user to validate the authenticity of the re-
+ceived keys through a proving process ( KeyProve described
+below). While this interactive design enables the user to
+verify the authenticity of received keys, universal verifica-
+tion is precluded, making it impossible for any party other
+than the user to distinguish between real and fake keys. The
+concept of deniability, widely discussed in cryptographic
+literature (e.g., [23]–[26]), plays a crucial role here. In our
+context, deniability ensures that a user can plausibly deny
+having received a fake commitment key and present it as
+genuine. This feature is facilitated by a simulation algorithm
+(SimKeyProve described below).
+2.1. Protocols and properties
+Definition 2.1. A nullifiable commitment scheme Π NC =
+(Setup, KeyGen, KeyProve, SimKeyProve, Commit, Nullify,
+Open) is a set of protocols, which operates as follows:
+• Setup(1λ) → (mpk, msk, ck∗) : on input a security pa-
+rameter λ, outputs a master public key mpk, a master
+secret key msk, and a nullifiable commitment key ck∗.
+• KeyGen(mpk, msk, b ∈ { 0, 1}) → ck : takes a master
+public key mpk, master secret key msk and bit b and
+returns a commitment key ck. If b = 1, it outputs a real
+commitment key, otherwise, it outputs a fake one.
+• KeyProve(mpk, msk, ck, b ∈ { 0, 1}) → (πck, (1/0)) : is
+an interactive protocol between a manager and a commit-
+ter. Let the manager be a prover P takes a master public
+key mpk, a master secret key msk, a commitment key
+ck, and a bit b. Let the committer be a verifier V that
+takes a master public key mpk, a public key ck, and a
+bit b. Through the interaction, V can verify whether ck is
+correctly generated and P knows msk. If the verification
+passes, it returns 1. Otherwise, it returns 0.
+• SimKeyProve(mpk, ck, b′ ∈ { 0, 1}) → (π′
+ck, (1/0)) : is a
+simulation algorithm that a verifier(committer) V always
+generates simulated proof π′
+ck without knowing a master
+secret key msk. A user can prove that ck is a real com-
+mitment key even if it is a fake one, and vice versa. The
+simulated proof always passes the verification progress.
+• Commit(ck, m; r) → cm : takes a commitment key ck, a
+message m and a random r. It outputs a commitment cm.
+• Open(ck, cm, m, r) → (1/0) : takes a commitment key
+ck, a commitment cm, a message m and a random r.
+If cm is a valid commitment of m using a random r, it
+outputs 1; otherwise, it outputs 0.
+• Nullify(msk, cm) → cm∗ : a manager transforms a stan-
+dard commitment cm to a nullifiable commitment cm∗
+using a master secret key msk. Specifically, if cm is
+created with a fake commitment key, cm∗ is opened with
+a message value set to zero. Conversely, if cm is formed
+with a real commitment key, cm∗ is opened with the
+original message committed in cm.
+• Opennull(ck∗, cm∗, m, r) → (1/0) : takes a nullifiable
+commitment key ck∗, nullified commitment cm∗, message
+m and random r. If cm∗ is a nullified commitment from
+a real commitment, it outputs 1. Otherwise, it outputs 0.
+For defining its security properties, given a security
+parameter 1λ, we denote a negligible function as negl(λ).
+PPT refers to a probabilistic polynomial time. A nullifiable
+commitment scheme Π NC should satisfy the following prop-
+erties:
+Hiding. The commitment from nullifiable commitment
+schemes ensures hiding even against a holder of the master
+secret key. In Figure 3 at Appendix A, the hiding property
+is defined as a game GameHiding
+A,Π NC between a challenger and a
+PPT adversary A. A receives (mpk, msk, ck∗, ck) from the
+challenger, and submits (m0, m1). A challenger randomly
+selects a bit c ∈ {0, 1} and sends a challenge commitment
+cm ← Commit(ck, mc; r) to A by choosing r randomly.
+The game outputs 1 if A correctly guesses c.
+Definition 2.2. Π NC satisfies hiding if AdvHiding
+A,Π NC(1λ) is
+negligible.
+Binding. The committer, after committing a message, can-
+not find any other message of which commitment is equiv-
+alent to the original message commitment.
+4
+Definition 2.3. Π NC ensures binding if the following holds:
+Pr
+
+
+(mpk, msk, ck∗) ← Setup(1λ)
+b ←$ {0, 1}, ck ← KeyGen(mpk, msk, b),
+(m0, r0, m1, r1) ← A(mpk, msk, ck∗, ck) :
+m0 ̸= m1 ∧ m0, m1 ̸= ⊥ ∧
+Commit(ck, m0; r0) = Commit(ck, m1; r1)
+
+ ≤ negl(λ).
+Nullifiability. Nullifiability in nullifiable commitment
+schemes is connected with the correctness of the scheme.
+All commitments can be opened using Open. After nulli-
+fication, using Opennull, a nullified commitment is opened
+with the original message m if the original commitment was
+generated using a real commitment key. If not, the nullified
+commitment will be opened with a zero message.
+Definition 2.4. Π NC satisfies nullifiability if the following
+holds:
+Pr
+
+
+(mpk, msk, ck∗) ← Setup(1λ),
+b ←$ {0, 1}, ck ← KeyGen(mpk, msk, b),
+∀m, r,cm ← Commit(ck, m; r),
+Open(ck, cm, m, r) = 1 :
+Opennull(ck∗, Nullify(msk, cm), b · m, r) = 1
+
+ = 1.
+Indistinguishability of keys (IK) . Consider two commit-
+ment keys, where each key, independently, can be either real
+or fake, or both could be of the same type. Given a commit-
+ment committed using one of these keys, the probability of
+correctly determining which key was used is negligible. This
+is a similar concept of key indistinguishability in encryption
+schemes (i.e, IK-CPA encryption scheme [27]), whereas
+ours is indistinguishability of keys for the commitment
+framework. Key indistinguishability is defined as a game
+in Figure 4 in Appendix A. In GameIK
+A,Π NC, A gets two
+commitment keys and submits a message. From a challenge
+commitment that is committed to the message using one of
+the two keys, A tries to guess which key was chosen.
+Definition 2.5. Π NC ensures indistinguishability of keys if
+AdvIK
+A,Π NC(1λ) is negligible
+Key deniability . While a msk holder can prove to a ck
+holder whether ck is real or fake using the interactive
+protocol KeyProve, any ck holder, without msk, can simulate
+proof using SimKeyProve asserting that the commitment key
+is real, even if it is a fake commitment key, and vice versa.
+This disables any party not participating in the interactive
+protocol distinguishing whether the commitment key is real
+or fake. Namely, if the ck holder is coerced to reveal their
+real key and proof from KeyProve, the ck holder can deny
+by submitting a fake key with a simulated proof from
+SimKeyProve.
+Definition 2.6. In a nullifiable commitment scheme Π NC,
+the key is deniable if for any offline PPT adversary A, the
+following is negligible:
+
+Pr
+
+
+(mpk, msk, ck∗) ← Setup(1λ),
+b ←$ {0, 1}, ck ← KeyGen(mpk, msk, b),
+(πck, 1) ← KeyProve(mpk, msk, ck, b) :
+A(mpk, ck∗, ck, πck) = 1
+
+ −
+Pr
+
+
+(mpk, msk, ck∗) ← Setup(1λ), b ←$ {0, 1},
+ck ← KeyGen(mpk, msk, b), b′ ←$ {0, 1},
+(π′
+ck, 1) ← SimKeyProve(mpk, ck, b′) :
+A(mpk, ck∗, ck, π′
+ck) = 1
+
+
+
+Homomorphism. Nullifiable commitment schemes exhibit
+homomorphic properties when homomorphic operations are
+applied to their corresponding messages, which can also be
+nullifiable. When homomorphism is applied, the behavior
+depends on the nature of the original commitment: if it is a
+real commitment, then the original message will be included
+in the aggregation. Conversely, if the commitment is fake, a
+zero message will be aggregated instead. Consequently, the
+resulting aggregated commitment can be opened to reveal
+the cumulatively aggregated nullifiable messages.
+Definition 2.7. A nullifiable commitment scheme, Π NC en-
+sures homomorphism if the following holds:
+Pr
+
+
+(mpk, msk, ck∗) ← Setup(1λ),
+∀i, bi ←$ {0, 1}, cki ← KeyGen(mpk, msk, bi),
+cmi ← Commit(cki, mi; ri),
+Open(cki, cmi, mi, ri) = 1 ,
+cm∗(= P cm∗
+i ) ← Nullify(msk, P cmi) :
+Opennull(ck∗, cm∗, P bi · mi, P ri) = 1
+
+
+= 1.
+2.2. Construction
+We instantiate a homomorphic nullifiable commitment
+scheme Π NC over an elliptic curve group G with prime order
+q where the discrete log (DL) assumption and the decisional
+Diffie-Hellman (DDH) assumption hold. We utilize the cryp-
+tographic hash function H. The construction is described in
+Construction 1.
+Theorem 2.1. If the DL assumption and DDH assumption
+hold in the elliptic curve group G, then for all probabilistic
+polynomial time adversaries A, Π NC in Construction 1,
+satisfies hiding, binding, nullifiability, indistinguishability of
+keys, key deniability, and homomorphism.
+We provide the formal proof in Appendix B.
+3. Secure e-voting systems
+3.1. Entities and assumptions
+An e-voting system is a set of protocols executed among
+a group of entities. The entities can be classified into three
+types, based on their roles and functionalities within the
+voting system.
+Authority. An authority oversees the entire voting system,
+conducting the setup and registration phases. In the tally
+phase, the authority gathers all ballots, tallies the results,
+and publishes them.
+5
+Voters. A voter has a right to cast a ballot. They should
+register to cast a ballot. All voter has their id to participate
+in the election.
+Public Bulletin Board (BB). The bulletin board is public
+and all entities can access it. All ballots from voters are
+posted on the bulletin board.
+Assumptions. When a voter registers their public key and
+obtains casting keys, the voter needs to undergo authenti-
+cation with their id. This procedure occurs either offline
+or, in the case of an online scenario, assumes the use of
+an authenticated private channel. Once authenticated, each
+voter is provided with one real casting key and as many
+fake keys as desired. The number of casting keys received
+by a voter is known only to the voter and the authority,
+excluding any third party. Throughout the voting process, an
+anonymous communication channel like the mix-net [28]–
+[31] is presumed, aligning with a foundational premise
+common in most e-voting systems [11], [12], [14], [20].
+We posit a period of non-interference for voters before
+the election ends. This assumption ensures that every voter
+has an opportunity to cast their ballot free from coercion,
+safeguarding the integrity of their vote. It precludes scenar-
+ios of constant surveillance or complete control over voters.
+Threat Model . We consider a PPT coercer who tries to
+coerce voters into either voting for a specific candidate or
+abstaining from voting altogether with or without asking for
+the voter’s casting key. A coercer possesses the capability
+to coerce any voter, potentially extending this coercion to
+all voters. A voter provides any information that the coercer
+requests including the casting key.
+3.2. Protocols
+An e-voting system Π Vote = ( Setup, Register, Vote,
+VerifyBallot, Tally, VerifyTally) is a set of protocols that
+operate as follows and can be classified into four phases:
+Setup phase.
+• Setup(1λ) → (PP, SK) : The authority generates an elec-
+tion key pair (PP, SK) and opens an election by setting
+public parameters PP such as PK, the start and end times,
+candidates, and eligible voters. The authority returns PP
+and SK.
+Register phase.
+• Register(PP, SK, id) → (skid, pkid, ck) : A voter has
+their own identifier id, generates a key pair (skid, pkid),
+registers pkid for the election and obtain a casting key ck
+to cast a ballot.
+Voting phase.
+• Vote(PP, (id, skid, pkid, ck, m)) → B : The voter encrypts
+a message m, casts their ballot B, and post to the bulletin
+board BB.
+• VerifyBallot(PP, PK, B) → (1/0) : Anyone can verify the
+ballot on BB.
+Tally phase.
+• Tally(PP, SK) → T : The authority collects all the bal-
+lots on BB and decrypts them. The authority tallies the
+messages and publishes the tally T .
+• VerifyTally(PP, T ) → (1/0) : Anyone can verify the tally.
+Construction 1 Proposed nullifiable commitment scheme construction
+Setup(1λ) :
+ρ ←$ Z∗
+q ; g1, g2, g3 ←$ G; g4 = gρ
+1
+mpk = (g1, g2, g3, g4); msk = ρ;
+ck∗ = (g2/gρ
+1 , g3);
+return (mpk, msk, ck∗);
+KeyGen(mpk, msk, b ∈ {0, 1}) :
+parse mpk = (g1, g2, g3, g4);
+h1 ←$ G; h2 = hmsk
+1 gb
+3;
+return ck = ((g1, h1), (g2, h2));
+Commit(ck, m; r) :
+parse ck = ((g1, h1), (g2, h2));
+C1 = gr
+1hm
+1 ; C2 = gr
+2h2
+m;
+return cm = (C1, C2);
+Nullify(msk, cm) :
+parse cm = (C1, C2);
+cm∗ = C2/(Cmsk
+1 );
+return cm∗;
+Open(ck, cm, m, r) :
+parse ck = ((g1, h1), (g2, h2)); cm = (C1, C2);
+if C1 = gr
+1hm
+1 ∧ C2 = gr
+2h2
+m then return 1;
+else return 0;
+Opennull(ck∗, cm∗, m, r) :
+parse ck∗ = (g∗, h∗);
+if cm∗ = g∗rh∗m then return 1;
+else return 0;
+KeyProve(mpk, msk, ck, b ∈ {0, 1}) :
+parse mpk = (g1, g2, g3, g4);
+parse ck = ((g1, h1), (g2, h2));
+V : c ←$ Z∗
+q ; sends d ← H(c);
+P : t ←$ Z∗
+q ; sends p = ht
+1;
+V : sends c ;
+P : assert d = H(c); sends k = t + msk · c;
+V : if hk
+1 = p(h2/gb
+3)c then
+return (πck = (p, k, c), 1); else return 0
+SimKeyProve(mpk, ck, b′ ∈ {0, 1}) :
+parse mpk = (g1, g2, g3, g4);
+parse ck = ((g1, h1), (g2, h2));
+(k′, c′) ←$ Z∗
+q ;
+p′ = hk′
+1 /(h2/gb′
+3 )c′
+;
+return (π′
+ck = (p′, k′, c′), 1);
+6
+3.3. Security properties
+From here, we write a set {x1, x2, · · · , xN } as a vector
+X. The operation of appending element e to a set X will
+be represented as X ⇐ e.
+Ballot privacy . The game GameBP
+A,Π Vote in Figure 5 in Ap-
+pendix A defines a game for ballot privacy. An adversary
+A selects two messages of equal length, and a challenging
+voter V flips a coin b and casts a ballot with a message mb.
+V provides a ballot and A makes a guess b′ about the value
+b.
+Definition 3.1. For any PPT adversary A, let the advantage
+be AdvBP
+A,Π Vote(1λ) =
+Pr[GameBP
+A,Π Vote(1λ) = 1] − 1
+2
+ . The
+voting system satisfies ballot privacy if AdvBP
+A,Π Vote(1λ) is
+negligible.
+Coercion resistance . The coercion resistance game
+GameCR
+A,Π Vote is outlined in Figure 1, formulizing KTV frame-
+work [17] which is a strengthened version of JCJ’s defini-
+tion [11]. JCJ’s limitation lies in its inability to distinguish
+between a voter intentionally casting a specific message and
+being forced to do so. KTV framework addresses this by
+ensuring voters can vote freely despite coercion attempts.
+For each coercion attack CA i ∈ CA, the attacker wants
+voters to be coerced by running a corrupted strategy cs′
+i.
+However, voters can use the counter strategy csi and evade
+CA i with probability 1. Coercion resistance is characterized
+by the attacker’s minimal chance of distinguishing between
+the voters’ defensive counter strategy csi and the manipu-
+lated, corrupted strategy cs′
+i.
+GameCR
+A,Π Vote(1λ, CAi, csi, cs′
+i) :
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . .Setup and register phase
+(PP, SK) ← Setup(1λ);
+All voters register for the election and obtain a casting
+key.
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .Voting phase
+Honest voters vote at any time during the voting phase.
+A performs a coercion attack CA i to a targeted voter V.
+b ←$ {0, 1};
+if b = 0 then V performs a counter strategy csi.
+else V performs a corrupted strategy cs′
+i.
+end if
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .Tally phase
+T ← Tally(PP, SK);
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .Challenging phase
+b′ ← A(PP, T );
+return b = b′;
+Figure 1: Coercion resistance game GameCR
+A,Π Vote
+Definition 3.2. For all PPT adversaries A and all coer-
+cion attack CA i ∈ CA, let SuccCR
+A,Π Vote(1λ, CAi, csi) be
+the probability of the voter successfully evading coercion
+attack CA i using the counter strategy csi. Let the corrupted
+strategy cs′
+i be the strategy operated by the voter when
+coerced. Let the advantage of the attacker distinguishing two
+strategies csi and cs′
+i be AdvCR
+A,Π Vote(1λ, CAi, csi, cs′
+i) =Pr[GameCR
+A,Π Vote(1λ, CAi, csi, cs′
+i) = 1] − 1
+2
+. Then, Π Vote is
+coercion-resistant if for all coercion attack CA i ∈ CA, the
+followings hold:
+• SuccCR
+A,Π Vote(1λ, CAi, csi) = 1
+• AdvCR
+A,Π Vote(1λ, CAi, csi, cs′
+i) ≤ negl(λ)
+Voter anonymity. The goal of A against voter anonymity
+is to distinguish the voter’s id associated with a specific
+ballot, even when A has access to the authority’s secret
+key. This implies that voter anonymity is maintained even
+if A can get the message of the ballot, ensuring the voter
+associated with a particular ballot remains unidentified. We
+present voter anonymity using a game, GameV A
+A,Π Vote, between
+a challenging voter V and a PPT adversary A, as shown in
+Figure 6 in Appendix A. V provides n public-private key
+and casting key pairs to A. A selects two public keys and
+make vote queries to V, providing a message m. V flips a
+coin b, casts a ballot Bb and provides it to A. A makes a
+guess b′ about the value b. The success of A in guessing b
+should be negligible to ensure voter anonymity.
+Definition 3.3. For any PPT adversary A, let the advantage
+be AdvV A
+A,Π Vote(1λ) =
+Pr[GameV A
+A,Π Vote(1λ) = 1] − 1
+2
+. Π Vote
+ensures voter anonymity if AdvV A
+A,Π Vote(1λ) is negligible.
+Individual verifiability . After the voting phase, the voter
+must be able to verify that their ballot is uploaded on the
+bulletin board and was not deleted or changed.
+Universal verifiability . When the election ends and the
+authority publishes the tally, anyone can verify the tally
+includes all ballots on the bulletin board.
+E2E verifiability. E2E verifiability is a combination of three
+steps; the voter can verify their ballot was cast-as-intended,
+their ballot was recorded-as-cast, and the election result was
+tallied-as-recorded.
+Eligibility verifiability . Anyone can verify that the ballot
+was cast by an eligible voter.
+4. zkV oting
+In this section, we propose a compiler that generically
+builds a coercion-resistant and E2E-verifiable e-voting sys-
+tem zkVoting by using homomorphic nullifiable commitment
+scheme(§2) and other building blocks in §4.1.
+4.1. Cryptographic building blocks
+Definition 4.1 (Hybrid encryption) . Given a public key
+encryption scheme Π PKE = ( Gen, Enc, Dec) and a sym-
+metric key encryption scheme Π SKE = ( Gen, Enc, Dec), a
+hybrid encryption scheme Π HBE = ( Gen, Enc, Dec) works
+as follows:
+• Gen(1λ) → (pk, sk) : using Π PKE.Gen, outputs a public
+key pk and a secret key sk.
+• Enc(pk, m; k) → CT : takes k ← Π SKE.Gen, a public
+key pk, and a message m and outputs ciphertext CT ←
+(Π PKE.Enc(pk, k), Π SKE.Enc(k, m)).
+7
+• Dec(sk, CT = (C1, C2)) → m : decrypts a message m ←
+Π SKE.Dec(Π PKE. Dec(sk, C1), C2).
+Both Π PKE and Π SKE are IK-CPA [27] and IND-CPA se-
+cure encryption scheme. Its ciphertexts are indistinguishable
+under the chosen plaintext attack. Also, from the ciphertext,
+no adversary can identify which key was used.
+Definition 4.2 (Zero-knowledge proof) . For some re-
+lation R, a zero-knowledge proof scheme Π ZKP =
+(Setup, Prove, Verify) works as follows:
+• Setup(1λ, R) → param : generates public parameters.
+• Prove(R, param, Φ; w) → π : given public parameters, a
+statement Φ and witness w, the prover P generates proof
+π that (Φ; w) ∈ R.
+• Verify(R, param, Φ, π) → (1/0) : given public parame-
+ters, a statement Φ and proof π, the verifier V confirms
+if π is valid.
+A zero-knowledge proof should satisfy completeness,
+soundness, and zero-knowledge. Completeness means that
+if for any statement (Φ; w) ∈ R , V always accepts any
+proof π ← P (Φ; w), that is, ∀(Φ; w) ∈ R , V(Φ, π) = 1 .
+Soundness implies that for any statement Φ /∈ R , the
+probability that any cheating ˆP can produce a valid proof
+π ← ˆP(Φ) such that V(Φ, π) = 1 is negligible. Zero-
+knowledge represents that for all (Φ; w) ∈ R, there exists a
+PPT simulator S with access only to the public statement
+Φ that can output a valid proof π′ ← S (Φ) such that
+V(Φ, π′) = 1.
+If a system is only secure against a computationally
+bounded adversarial prover then it becomes an argument
+system. If a system proves that the prover knows a witness
+then it provides knowledge soundness. An argument system
+is considered succinct if the proof size and the verifying
+time are succinct.
+A membership proof scheme is a cryptographic method
+used to prove that a certain element belongs to a specific
+set.
+Definition 4.3 (Membership proof). The membership proof
+scheme Π M = ( BuildSet, Verify) for a set S is a set of
+algorithms, which operates as follows:
+• BuildSet(S) → rt: takes a set S and outputs a set ID rt.
+• Verify(rt, e) → (1/0): takes a rt, and an element e, and
+outputs 1 if e is a member of the set.
+4.2. Compiling coercion-resistant secure e-voting
+systems
+To enhance coercion resistance in the electronic voting
+system, the commitment keys of the nullifiable commitment
+scheme serve as casting keys. The inclusion of a fake
+casting commitment key allows voters to submit a fake
+ballot, creating a mechanism to resist coercion. Each casting
+key is authorized to cast one ballot. While only one real
+casting key is permitted, multiple fake casting keys can be
+issued to counteract potential coercion attacks. At the end
+of the registration phase, the casting keys are uploaded to
+the bulletin board and used to verify voter eligibility.
+The central concept for ensuring verifiability is to use a
+zero-knowledge proof system (ZKP) to demonstrate that the
+algorithm has been executed as intended, thereby ensuring
+that all entities, such as voters and authorities, follow the
+protocol. In scenarios such as clash attacks [32] where
+two voters vote for the same candidate, malicious voting
+devices or authority could deceive the voters with the same
+ballot. Two voters do not realize they look at the same
+ballot. Therefore, voter names or pseudonyms should be
+attached to the ballot to satisfy E2E verifiability [10]. To
+achieve E2E verifiability, we embrace the concept of a serial
+number [33]. The serial number is bound to the secret key
+of the voter and the casting key using a cryptographic hash
+function H. This serial number also prevents double voting.
+These techniques enable the construction of E2E verifiable
+e-voting systems, providing a high level of confidence in the
+integrity of the election. Every encrypted ballot is associated
+with a commitment using ZKP, and the tallying process is
+efficiently proven by the tallier through homomorphically
+aggregated and nullifiable commitments.
+The full construction Π Vote works as follows:
+Setup phase.
+• Setup(1λ) → (PP, SK) : the authority generates a key pair
+(mpk, msk, ck∗) ← Π NC.Setup(1λ) for a nullifiable com-
+mitment, another key pair (pk, sk) ← Π HBE.Gen(1λ) for a
+hybrid encryption and public parameters for all relations
+param ← Π ZKP.Setup(1λ, R) for zero-knowledge proofs.
+Each relation is defined below. Then, the authority sets
+public values PP including a master public key mpk, a
+nullifiable commitment key ck∗, a public key pk, public
+parameters param, a unique election ID e and other
+information for the voting system such as the start time,
+end time, and a list of nv number of eligible voters.
+The authority returns PP = (mpk, ck∗, pk, param, e) and
+SK = (msk, sk).
+Register phase.
+• Register(PP, SK, id) → (skid, pkid, ck) : a voter has
+their own ID id and obtains a casting key ck which
+is a commitment key in a nullifiable commitment
+scheme. The voter sets a secret key skid and gener-
+ates a public key pkid = H(skid) and proof πid ←
+Π ZKP.Prove(Rid, param, pkid; skid). Then the voter reg-
+isters a public key and sets a bit b ∈ { 0, 1} meaning
+that the voter requires a real casting commitment key if
+b = 1 or a fake one if b = 0 . The authority verifies
+Π ZKP.Prove(Rid, param, pkid, πid) and issues a casting
+key ck with proof πck ← Π ZKP.Prove(Rck, param, mpk,
+ck, b; msk) guaranteeing the correctness of ck. Proof πck
+can be generated using Π NC.KeyProve(mpk, msk, ck, b).
+Here, the voter can obtain a fake casting key multiple
+times but a real key only once. At the end of the regis-
+ter phase, the authority collects all voters’ casting keys
+and public keys CKlist ⇐ (ck, pkid). They are then
+uploaded to the bulletin board BB in the form of a set
+rt = Π M.BuildSet(CKlist).
+8
+While a voter can only obtain a real casting key once,
+some might attempt to request it multiple times. For
+this reason, the authority secretly stores CKdb ⇐
+(id, (ck, pkid), b) to verify whether the voter has previ-
+ously issued a real casting key. Furthermore, to guar-
+antee that the authority does not issue more real keys
+than the total number of voters, ensuring each voter
+receives only one real key, the authority provides proof.
+It establishes that a nullifiable commitment cm∗ from
+the aggregated commitment cm, which is the summation
+of commitment cmi committed using message 1, equals
+the total number of eligible voters nv, since a message
+from a real commitment is considered. This is confirmed
+by πtotal = Π ZKP.Prove(Rtotal, ck∗, cm, nv; msk), where
+cmi ← Π NC.Commit(ck, 1; 0) and cm ←P cmi.
+Voting phase.
+• Vote(PP, (id, pkid, skid, ck, m)) → B : the voter
+generates a unique serial number of their ballot,
+sn = H(e, ck, skid). The voter encrypts a cipher-
+text CT ← Π HBE.Enc(pk, m; k) and a commitment
+cm ← Π NC.Commit(ck, m; r) with a random r. Then,
+the voter generates proof πvote ← Π ZKP.Prove(Rvote, PP,
+rt, e, sn, CT , cm; m, r, skid, pkid, ck). The voter takes a
+receipt of a serial number and a random symmetric key
+k which is used in the hybrid encryption scheme. Also,
+the voter generates a ballot B = ( e, sn, CT , cm, πvote)
+and sends it to the bulletin board BB. By utilizing the
+receipt, the voter can verify whether their device functions
+correctly as intended. After casting a ballot and uploading
+it to the bulletin board, voters can use any trusted device
+to locate their ballot using a serial number. They can then
+decrypt the corresponding portion of the ciphertext using
+k and open the commitment, ensuring that their voting
+device has accurately encrypted the ballot as intended.
+• VerifyBallot(PP, PK, B) → (1/0) : BB checks if there
+exist duplicated ballots with the same serial num-
+ber, and verifies the validity of the ballot through
+Π ZKP.Verify(Rvote, PP, rt, e, sn, CT , cm). The ballot is
+uploaded on BB if VerifyBallot outputs 1.
+Tally phase.
+• Tally(PP, SK) → T : the authority downloads all the
+ballots on BB. The authority decrypts each ballot’s ci-
+phertext and nullifies the corresponding commitment.
+Now, the authority can open the nullifiable commitment
+with m, r. If a commitment successfully opens, it in-
+dicates that the commitment was real (i.e. b = 1 ).
+The authority proceeds to tally the message, computing
+(mtally = P bimi). All nullifiable commitments and
+corresponding randoms are aggregated to cm∗
+sum, rsum.
+Subsequently, the authority generates a proof πtally ←
+Π ZKP(Rtally, PP, cmsum, mtally; msk, rsum). This method
+streamlines the process by nullifying all commitments and
+utilizing the homomorphic properties of the nullifiable
+commitment scheme. Instead of verifying each ballot in-
+dividually, the authority produces a single comprehensive
+proof that only real ballots are tallied.
+• VerifyTally(PP, T ) → (1/0) : Anyone can download
+all the ballots on BB, and verify the tally using zero-
+knowledge proof.
+Relations. We describe the following relations for use in
+our zero-knowledge proofs:
+• Rid ensures the voter generates a valid piid = H(skid).
+Rid = {(pkid; skid) : pkid = H(skid)}.
+• Rck ensures that the authority issues a casting key
+that the voter has required (knowledge of b) and
+knowledge of msk. Proof can be made πck ←
+Π NC.KeyProve(mpk, msk, ck, b).
+Rck = {(mpk, ck, b; msk) : ck = Π NC.Gen(mpk, msk, b)}
+• Rtotal guarantees that the authority issues nv real casting
+keys to ensure that each voter receives a single real casting
+key respectively.
+Rtotal =
+
+
+
+(ck∗, cm, nv; msk) :
+cm∗ ← Π NC.Nullify(msk, cm),
+Π NC.Opennull(ck∗, cm∗, nv, 0) = 1
+
+
+
+• Rvote ensures that the voter generated the ballot honestly.
+Rvote =
+
+
+
+
+PP, rt, e, sn,CT , cm;
+m, r, skid, pkid, k, ck
+
+:
+pkid = H(skid) ∧ sn = H(e, ck, skid)∧
+Π M.Verify(rt, (ck, pkid)) = 1∧
+CT = Π HBE.Enc(pk, m; k)∧
+cm = Π NC.Commit(ck, m; r)
+
+
+
+• Rtally ensures that the authority knows the master secret
+key to identify the real ballots and collects all of them.
+Rtally =
+( (PP, cmsum, mtally; msk, rsum) :
+cm∗
+sum = Π NC.Nullify(msk, cmsum),
+Π NC.Opennull(ck∗, cm∗
+sum, mtally, rsum) = 1
+)
+4.3. Security analysis
+Coercion scenarios . We categorize coercion attacks CA
+into four types. For each CA i ∈ CA, voters are capable
+of running the counter strategy csi and evading CA i with
+a probability of 1. Furthermore, the attacker can distinguish
+between the strategies of the voters who use the counter
+strategy csi and the corrupted strategy cs′
+i with negligible
+probability.
+The four types of coercion attacks are: 1) requiring a
+casting key to cast a ballot on behalf of the voter, 2) requir-
+ing a casting key to be absent, 3) instructing the choice, or
+4) forcing the voter to be absent. In each scenario, a PPT
+adversary A tries to coerce the voter V to cast a β message
+ballot in some way, but the voter V can establish the counter
+strategy cs and corrupted strategy cs′ indistinguishable from
+the coercion attacker A to cast a α message ballot. Note that
+BB is public, and A can observe BB and count the number
+of uploaded ballots. This means that the number of ballots
+cast in one scenario should be the same.
+In each case, voters can evade coercion attacks by fol-
+lowing instructions using fake casting keys and can cast their
+9
+ballot using a real casting key as they wish. Specifically,
+voters can evade CA as follows: 1) and 2) provide a fake
+casting key, 3) cast a ballot with a fake casting key, or 4) be
+absent with a fake casting key, and later cast a ballot using
+a real casting key. The attacker cannot distinguish whether
+the given casting key is real or fake. Since key deniability
+holds for our nullifiable commitment scheme, through the
+SimKeyProve algorithm, the voter can generate proof that
+any casting key is a real casting key. The attacker cannot
+distinguish whether the ballot was cast using a real casting
+key or a fake key. Even if they could, since our voting system
+provides ballot privacy, the attacker only gets the knowledge
+that the ballot is valid and the attacker cannot determine
+whose casting key was used. This makes it meaningless for
+the attacker to instruct voters or buy ballots.
+lemma 4.1. For a PPT adversary A performing a coercion
+attack CA 1 ∈ CA, then the voter can set a counter strategy
+cs1 against a corrupted strategy cs′
+1 where the followings
+hold:
+• SuccCR
+A,Π Vote(1λ, CA1, cs1) = 1
+• AdvCR
+A,Π Vote(1λ, CA1, cs1, cs′
+1) ≤ negl(λ)
+Proof. In the first scenario, the coercive attacker A performs
+a coercion attack CA1 that A requires a casting key of the
+targeted voter V. A tries to cast a ballot with a message
+β on behalf of V using the acquired casting key. Then the
+voter V performs the counter strategy cs1 as follows:
+1) The voter submits a fake casting key.
+2) A casts a ballot with a message β using the given key.
+3) The voter casts an intended ballot with a message α using
+a real casting key.
+The corrupted strategy cs′
+1 works as follows:
+1) The voter submits a real casting key.
+2) A casts a ballot with a message β using the given key.
+3) The voter casts a ballot with any message using a fake
+casting key.
+It is obvious that by running the counter strategy (if
+b = 0 ) the voter can evade coercion with probability 1.
+Therefore, we have, SuccCR
+A,Π Vote(1λ, CA1, cs1) = 1 . Since
+Π NC is an indistinguishable commitment scheme and the
+voter can simulate proof, whether A acquired a real key or
+fake key, A cannot distinguish which strategy V performed.
+The total number of ballots on BB is perfectly identical. We
+also have AdvCR
+A,Π Vote(1λ, CA1, cs1, cs′
+1) ≤ negl(λ).
+lemma 4.2. For a PPT adversary A performing a coercion
+attack CA 2 ∈ CA, then the voter can set a counter strategy
+cs2 against a corrupted strategy cs′
+2 where the followings
+hold:
+• SuccCR
+A,Π Vote(1λ, CA2, cs2) = 1
+• AdvCR
+A,Π Vote(1λ, CA2, cs2, cs′
+2) ≤ negl(λ)
+Proof. In the second scenario, the coercive attacker A per-
+forms a coercion attack CA 2 that A requires a casting key of
+the targeted voter V. A tries to be absent using the acquired
+casting key. Then the voter V performs the counter strategy
+cs2 as follows:
+1) The voter submits a fake casting key.
+2) The voter casts an intended ballot with a message α using
+a real casting key.
+The corrupted strategy cs′
+2 works as follows:
+1) The voter submits a real casting key.
+2) A does nothing to be absent using the given key.
+3) The voter casts a ballot with any message using a fake
+casting key.
+It is obvious that by running the counter strategy (if
+b = 0 ) the voter can evade coercion with probability 1.
+Therefore, we have, SuccCR
+A,Π Vote(1λ, CA2, cs2) = 1. The to-
+tal number of ballots on BB is perfectly identical, and indis-
+tinguishable holds in Π NC, A cannot distinguish strategies.
+We also have AdvCR
+A,Π Vote(1λ, CA2, cs2, cs′
+2) ≤ negl(λ).
+lemma 4.3. For a PPT adversary A, given a coercion attack
+CA 3 ∈ CA, then the voter can set a counter strategy cs3
+and a corrupted strategy cs′
+3 where the following hold:
+• SuccCR
+A,Π Vote(1λ, CA3, cs3) = 1
+• AdvCR
+A,Π Vote(1λ, CA3, cs3, cs′
+3) ≤ negl(λ)
+Proof. In the second scenario, the coercion attack CA 3 of
+A is to instruct V to cast a ballot β. Then the voter V runs
+a counter strategy cs3 as follows:
+1) V casts a coerced ballot with a message β using a fake
+key.
+2) V casts a intended ballot with a message α using a real
+key.
+For the corrupted strategy cs′
+3, V should cast any ballot
+regardless of the message, to make two strategies indistin-
+guishable, working as follows:
+1) V casts a coerced ballot with a message β using a real
+key.
+2) V casts any ballot using a fake key.
+If V runs the counter strategy then V can evade co-
+ercion with probability 1, SuccCR
+A,Π Vote(1λ, CA3, cs3) = 1 .
+From the tally, no information on V’s ballot is leaked.
+Owing to ballot privacy, A cannot distinguish the bal-
+lots and which strategy V performed. We also have
+AdvCR
+A,Π Vote(1λ, CA3, cs3, cs′
+3) ≤ negl(λ).
+lemma 4.4. For a PPT adversary A, given a coercion attack
+CA 4 ∈ CA, if ballot privacy holds, then the voter can set
+a counter strategy cs4 and a corrupted strategy cs′
+4 where
+the following hold:
+• SuccCR
+A,Π Vote(1λ, CA4, cs4) = 1
+• AdvCR
+A,Π Vote(1λ, CA4, cs4, cs′
+4) ≤ negl(λ)
+Proof. The coercion attack CA 4 of A is to force the voter to
+be absent from the election. Then the voter V runs a counter
+strategy cs4 as follows:
+1) V abstains from voting using a fake casting key.
+2) V casts an intended ballot with a message α using a real
+key.
+For the corrupted strategy cs′
+4, V should cast any ballot
+regardless of the message, to make two strategies indistin-
+guishable, working as follows:
+10
+1) V abstains from voting and does not cast a ballot using
+a real key.
+2) V casts a ballot with any message using a fake key.
+V runs the counter strategy and can evade coercion
+with probability 1. We have SuccCR
+A,Π Vote(1λ, CA4, cs4) =
+1. From the tally and proof, no information on V’s
+ballot is leaked. Owing to ballot privacy and voter
+anonymity, the ballots leak no information. A cannot dis-
+tinguish which strategy V runs. Therefore, we also have
+AdvCR
+A,Π Vote(1λ, CA4, cs4, cs′
+4) ≤ negl(λ).
+Theorem 4.1. Given a nullifiable commitment scheme Π NC,
+a hybrid encryption scheme Π HBE, a cryptographic hash
+function H, and a zero-knowledge proof system Π ZKP, a
+voting system Π Vote= ( Setup, Register, Vote, VerifyBallot,
+Tally, VerifyTally) ensures ballot privacy, receipt freeness,
+coercion resistance, E2E verifiability, eligibility verifiability,
+and voter anonymity.
+Proof. Ballot privacy . In the ballot B = ( e, sn, CT , cm,
+πvote), the voter’s message is included in the ciphertext
+CT , the commitment cm and the zero-knowledge proof
+πvote. An adversary A wins the game if A distinguishes
+between ciphertexts CT 0 and CT 1, between commitments
+cm0 and cm1, or between zero-knowledge proofs πvote,0 and
+πvote,1. We can construct auxiliary adversaries B, C and D
+such that AdvBP
+A,Π Vote(1λ) ≤ AdvCT
+B (1λ) + Advcm
+C (1λ) +
+Advπvote
+D (1λ). Here, B tries to distinguish the ciphertexts,
+C tries to distinguish commitments and D tries to distinguish
+zero-knowledge proofs. Π HBE is both IK-CPA and IND-CPA
+secure, from definition 2.2, we know that the commitments
+satisfy hiding, thus, AdvCT
+B (1λ) and Advcm
+C (1λ) have
+a negligible probability. Additionally, since πvote is zero
+knowledge, the advantage Advπvote
+D (1λ) is negligible. Then,
+the probability of winning the game GameBP
+A,Π Vote is only
+a random guessing. Thus, the advantage AdvBP
+A,Π Vote(1λ) is
+negligible, and Π Vote ensures ballot privacy.
+Receipt freeness . Receipt freeness can be proven infor-
+mally. Since the e-voting system ensures coercion resistance,
+it naturally ensures receipt freeness. Therefore, we focus on
+proving coercion resistance.
+A voter gets a receipt after casting a ballot. If the voter
+submits the receipt to the adversary, the adversary finds the
+ballot on BB and tries to decrypt the message. The adversary
+may find the exact ballot on BB since the receipt contains
+a serial number. However, the adversary cannot nullify the
+commitment, meaning that the ballot may be a fake ballot.
+Thus, the attacker cannot be convinced that the voter cast
+the decrypted message. Therefore, the voter cannot prove
+their choice, and receipt freeness is ensured.
+Coercion resistance. From lemmas 4.1, 4.2, 4.3, and 4.4, for
+all cases, V can perform the counter strategy with probability
+1. Also, A cannot distinguish the counter strategy from the
+corrupted strategy. Thus, Π Vote is coercion-resistant.
+Voter anonymity . From the ballot B = ( e, sn, CT , cm,
+πvote), the possible way for A distinguishing the casting
+key of the ballot is to distinguish one of sn, cm, πvote.
+We have, AdvV A
+A,Π Vote(1λ) ≤ Advsn
+B (1λ) + Advcm
+C (1λ) +
+Advπvote
+D (1λ). The serial number sn is the output of the
+hash function where its inputs are (e, skid, ck). It looks like
+a random in A’s view.Π NC is an indistinguishable nullifiable
+commitment scheme that the adversary cannot guess ck.
+We know πvote is zero-knowledge. Then, A can win the
+game GameV A
+A,Π Vote(1λ) only by random guessing, 1/2. We
+have that AdvV A
+A,Π Vote(1λ) ≤ negl(λ). As a result, the voting
+system ensures voter anonymity.
+Individual verifiability. The voter can compute the serial
+number of their ballots and find their ballot in the BB. Only
+the ballots that have passed VerifyBallot are uploaded to the
+blockchain. The relation Rvote includes checks for the hash
+function for the serial number, the encryption process, and
+the commit process. Given the soundness of Π ZKP, a ballot
+generated with different sk∗
+id and ck∗ can pass VerifyBallot
+with only a negligible probability.
+Universal verifiability. Anyone can retrieve the inputs for
+the relation Rtally and execute VerifyTally. If a dishonest
+authority were to exclude certain ballots, include ballots
+not uploaded on BB, or announce an incorrect tally, the
+soundness of Π ZKP dictates that the verification process
+would be unsuccessful.
+E2E verifiability. Consider an honest voter V who casts a
+ballot B. After the voting phase, BB discloses all the ballots.
+Then, V can identify their ballot using their serial number
+sn = H(e||ck||skid). If the ballot passes VerifyBallot, the
+voter is assured that their vote was cast-as-intended. If the
+content of the ballot matches what the voter originally cast,
+they can be assured it was recorded-as-cast. In the tally
+phase, the authority tallies all ballots and uploads the result
+along with the zero-knowledge proof that the tally comes
+from all ballots. Anyone can verify tallied-as-recorded. In
+Appendix C, we prove E2E verifiability using Cortier’s
+definition [9].
+Eligibility verifiability. In the relation Rvote contains the
+membership check to prove the membership of ( ck, pkid).
+By the soundness of Π ZKP, a ballot generated using the
+arbitrarily generated ck′ and/or pk′
+id can pass VerifyBallot
+only with a negligible probability.
+4.4. Construction
+In Construction 2, we instantiate zkVoting using the
+proposed nullifiable commitment scheme Π NC from §2.2 and
+describe details for the practical instantiation. Unless other-
+wise specified, each phase operates as described in §4. The
+public bulletin board is implemented with the Blockchain
+bulletin board using a smart contract denoted as BBB.
+Message Format . There is no limitation on the message
+space for an encryption scheme. It can vary depending
+on the specific encryption scheme used and can be tai-
+lored to adequately represent a candidate. For our nullifi-
+able commitment scheme to achieve homomorphism, the
+aggregated message is represented as a commitment with
+a nullifiable commitment key. Note that although a single
+block message is represented in Construction 1, it can
+be extended to support a message with multiple blocks
+by allowing a vector of g3, h1, and h2. For instance, k
+11
+blocks in a message m = (m1||m2|| · · · ||mk) are commit-
+ted to (C1, C2) = ( gr
+1
+Qk
+i=1 hmi
+1,i , gr
+2
+Qk
+i=1 hmi
+2,i ) with ck =
+((g1, h1,1, . . . , h1,k), (g2, h2,1, . . . , h2,k)) where h2,i =
+hmsk
+1,i gb
+3,i. The keyProof πck becomes (p1, . . . , pk, k, c), and
+verifier V checks if hk
+1,i = pi(h2,i/gb
+3,i)c for 1 ≤ i ≤ k in
+KeyProve. Therefore, in designing the message format, we
+meticulously ensure that the size of each block is sufficiently
+large to prevent overflow following aggregate commitments.
+However, the message structure in an encryption scheme
+does not necessarily have to mirror the format used in
+commitments.
+5. Experiment
+We have implemented the proposed voting system. For
+a zero-knowledge proof system, we use the Gro16 zk-
+SNARK proof system in C++ [34], [35]. This system is
+ideal for blockchain applications due to its constant-sized
+proofs and efficient verification. A key aspect of this system
+is the trusted setup phase, where the authority prepares
+common random strings and uploads them to BBB. For
+a collision-resistant hash function, we adopt the MiMC7
+hash function [36] optimized for zk-SNARKs. For member-
+ship proofs, we employed a Merkle hash tree. The nullifi-
+Construction 2 zkVoting construction
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .Setup phase
+Setup(1λ) :
+(mpk, msk, ck∗) ← Π NC.Setup(1λ); ( pk, sk) ← Π HBE.Gen(1λ); param ← Π ZKP(1λ, Rid, Rck, Rtotal, Rvote, Rtally); e ←$ {0, 1}λ
+return (PP = (mpk, ck∗, pk, param, e), SK = (msk, sk));
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .Register phase
+Authority(PP, SK) Voter(PP, id);
+Register(PP, SK, id) :
+parse PP = (mpk, ck∗, pk, param, e); SK = (msk, sk); parse PP = (mpk, ck∗, pk, param, e);
+skid ←$ {0, 1}λ; pkid = H(skid);
+πid = Π ZKP.Prove(Rid, param, pkid; skid);
+id, pkid, πid, b← − − − − − − − − − − − − − − −b ← 1(real) or 0(f ake);
+assert Π ZKP.Verify(Rid, param, pkid, πid) = 1;
+ck = Π NC.KeyGen(mpk, msk, b);
+assert (id, (ck, pkid), b) ̸∈ CKdb;
+CKdb ⇐ (id, (ck, pkid), b);
+CKlist ⇐ (ck, pkid); ck− − − − − − − − − − − − − − − →
+assert Π NC.KeyProve(mpk, msk, ck, b) = ( πck, 1); ← − − − − − − − − →assert Π NC.KeyProve(mpk, msk, ck, b) = ( πck, 1);
+upload (ck, pkid) to BBB;
+cm += Π NC.Commit(ck, 1; 0);
+upload cm, rt = Π M.BuildSet(CKlist), πtotal = Π ZKP(Rtotal, param, ck∗, cm, nv; msk) to BBB;
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .Voting phase
+Vote(PP, ck, CKlist, pkid, skid, m) :
+parse PP = (mpk, ck∗, pk, param, e);
+sn = H(e, ck, skid); cm ← Π NC.Commit(ck, m; r);
+CT ← Π HBE.Enc(pk, (m, r); k);
+πvote = Π ZKP.Prove(Rvote, PP, rt, e, sn, CT , cm; m, r, skid, pkid, k, ck);
+send B to BBB;
+return (k, B = (e, sn, CT , cm, πvote));
+VerifyBallot(PP, B) :
+parse PP = (mpk, ck∗, pk, param, e);
+parse B = (e, sn, CT , cm, πvote);
+assert sn ̸∈ BBB ;
+return Π ZKP.Verify(Rvote, PP, rt, e, sn, CT , cm, πvote);
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .Tally phase
+Tally(PP, SK) :
+parse PP = (mpk, ck∗, pk, e); SK = (msk, sk);
+foreach Bi = (e, sni, CT i, cmi) in BBB do
+(mi, ri) ← Π HBE.Dec(sk, CT i); cmsum += cmi; rsum += ri;
+if Π NC.Opennull(ck∗, Π NC.Nullify(msk, cmi), mi, ri) = 1 then
+mtally += mi; endif endforeach
+πtally = Π ZKP.Prove(Rtally, PP, cmsum, mtally; msk, rsum);
+return T = (mtally, πtally);
+VerifyTally(PP, T ) :
+parse T = (mtally, πtally);
+foreach Bi = (e, sni, CT i, cmi) in BBB do
+cmsum += cmi; endforeach
+return Π ZKP.Verify(Rtally, PP, cmsum, mtally, πtally);
+12
+able commitment scheme was implemented over an elliptic
+curve, following the methodologies in [37], [38]. Given that
+this curve has an order of 254 bits, it supports messages up
+to 254 bits in length. Consequently, we set the maximum
+number of eligible voters, nv, to 216, and the number of
+candidates to 15.
+TABLE 3: Analysis for relations
+Rid Rtotal Rvote Rtally
+# of constraints 365 2,243 15,829 6,111
+CRS size 126 kB 0.9MB 5.7 MB 2.4 MB
+TABLE 3 presents an analysis of the relations. Rvote
+contains proof of membership and encryption, leading to a
+large number of constraints and having the largest CRS size.
+An increase in CRS size not only lengthens the proving time
+but also impacts the overall size of the application.
+The authority is implemented as a server using Intel
+Xeon Gold 6242R CPU with 250 GB RAM. BBB is
+designed as a blockchain smart contract (Ethereum [39]
+ganache) using the Truffle framework. V oting devices are
+shown in TABLE 4.
+After voters download the application, they prove their
+identity and register for the election. Figure 2(a) illustrates
+the time cost for the register phase on various devices.
+Figure 2(b) depicts the execution time for the voting
+phase. The voting can be completed within a few seconds
+on every device. Especially on higher-performance devices
+C, D, and E, the voting time is less than 3s. The voting
+transaction is processed in BBB, which requires 347,363
+gas in Ethereum. Note that since the gas fee of 350K gas is
+quite expensive in public blockchains, a dedicated sidechain
+will be appropriate for BBB.
+Figure 2(c) presents the execution time for the tally
+phase where x-axis represents the number of ballots. The
+tally process consists of ballot decryption and tally proof
+generation. It requires 3.9ms to decrypt each ballot and
+360ms to generate the tally proof on the server. Note that
+the tally can be improved using parallel processing.
+Comparison with other coercion-resistant e-voting sys-
+tems. When compared to existing systems, Civitas [12]
+TABLE 4: V oting devices
+V oting devices Specification
+Device1 OS: Android 13
+A (Galaxy Processor: Qualcomm Snapdragon 8 Gen1
+S22+) RAM: 8 GB LPDDR5 SDRAM
+Device2 OS: Android 12
+B (Galaxy Processor: Samsung Exynos 9825
+Note 10+) RAM: 12 GB LPDDR4X SDRAM
+Device3 OS: iOS 16.03
+C (iPhone Processor: Apple A14 Bionic
+12 Mini) RAM: 4 GB LPDDR4X SDRAM
+Device4 OS: iOS 16.03
+D (iPhone Processor: Apple A16 Bionic
+14 Pro) RAM: 6 GB LPDDR5 SDRAM
+Device5 OS: macOS Ventura 13.3.1
+E (MacBook Processor: Apple M1 Pro
+Pro 16) RAM: 32 GB
+achieves a casting time of 345ms and tallies 500 ballots in
+about 5 hours (36 sec per ballot). In contrast, V oteAgain [14]
+has a casting time of 1.6 seconds and can tally 100,000
+ballots in 13.5 minutes (8.1 ms per ballot). In Loki [16],
+it takes approximately 78 ms to generate a ballot with
+additional periodic obfuscation time which is close to the
+ballot generating time. For tallying the ballot, it takes 7.1
+ms per ballot.
+6. Conclusion
+In this paper, we introduce a novel cryptographic tool,
+a nullifiable commitment scheme, designed specifically for
+situations involving coercion. Leveraging this scheme, we
+present zkVoting, a coercion-resistant, E2E-verifiable e-
+voting system. Our system offers enhanced security prop-
+erties while streamlining the tallying process. We provide
+comprehensive theoretical frameworks and formal security
+proofs to validate the robustness of our system. Furthermore,
+we underscore the practicality of zkVoting by elaborating
+on its seamless integration into smartphone and blockchain
+applications, showcasing its readiness for real-world deploy-
+ment.
+A B C D E0
+200
+400
+600
+400
+520
+9
+75 48
+Total [ms]
+Prove [ms]
+(a) Register phase
+A B C D E0
+2
+4
+6
+8
+6.59
+7.3
+2.65 2.3
+1.6
+Total [s]
+Prove [s]
+(b) V oting phase
+210 211 2120
+5
+10
+15
+20
+4.36
+8.26
+15.96Total [s]
+Prove [s]
+(c) Tally phase
+Figure 2: Performance with 16 Merkle tree depth and 15 candidates: (a) register time and (b) voting time on various devices,
+and (c) tally time by varying the number of ballots. Note that the y-axis represents the execution time in seconds.
+13
+References
+[1] S. T. Ali and J. Murray, “An overview of end-to-end verifiable voting
+systems,” CoRR, vol. abs/1605.08554, 2016. [Online]. Available:
+http://arxiv.org/abs/1605.08554
+[2] H. Jonker, S. Mauw, and J. Pang, “Privacy and verifiability in vot-
+ing systems: Methods, developments and trends,” Computer Science
+Review, vol. 10, pp. 1–30, 2013.
+[3] R. Küsters, T. Truderung, and A. V ogt, “Verifiability, privacy, and
+coercion-resistance: New insights from a case study,” in 2011 IEEE
+Symposium on Security and Privacy , 2011, pp. 538–553.
+[4] J. Lee, J. Choi, J. Kim, and H. Oh, “Saver: Snark-friendly, additively-
+homomorphic, and verifiable encryption and decryption with reran-
+domization,” Cryptology ePrint Archive, Report 2019/1270, 2019,
+https://eprint.iacr.org/2019/1270.
+[5] V . Cortier, D. Galindo, S. Glondu, and M. Izabachene, “Election
+verifiability for helios under weaker trust assumptions,” in European
+Symposium on Research in Computer Security . Springer, 2014, pp.
+327–344.
+[6] V . Cortier, D. Galindo, R. Küsters, J. Mueller, and T. Truderung, “Sok:
+Verifiability notions for e-voting protocols,” in2016 IEEE Symposium
+on Security and Privacy (SP) . IEEE, 2016, pp. 779–798.
+[7] V . Cortier and J. Lallemand, “V oting: You can’t have privacy without
+individual verifiability,” in Proceedings of the 2018 ACM SIGSAC
+Conference on Computer and Communications Security . ACM,
+2018, pp. 53–66.
+[8] S. Kremer, M. Ryan, and B. Smyth, “Election verifiability in elec-
+tronic voting protocols,” in Computer Security – ESORICS 2010 ,
+D. Gritzalis, B. Preneel, and M. Theoharidou, Eds. Berlin, Hei-
+delberg: Springer Berlin Heidelberg, 2010, pp. 389–404.
+[9] V . Cortier, D. Galindo, S. Glondu, and M. Izabachène, “Election
+verifiability for helios under weaker trust assumptions,” in Computer
+Security - ESORICS 2014, M. Kutyłowski and J. Vaidya, Eds. Cham:
+Springer International Publishing, 2014, pp. 327–344.
+[10] R. Küsters and J. Müller, “Cryptographic security analysis of e-
+voting systems: Achievements, misconceptions, and limitations,” in
+Electronic Voting: Second International Joint Conference, E-Vote-
+ID 2017, Bregenz, Austria, October 24-27, 2017, Proceedings 2 .
+Springer, 2017, pp. 21–41.
+[11] A. Juels, D. Catalano, and M. Jakobsson, “Coercion-resistant elec-
+tronic elections,” in Proceedings of the 2005 ACM Workshop on
+Privacy in the Electronic Society , 2005, pp. 61–70.
+[12] M. R. Clarkson, S. Chong, and A. C. Myers, “Civitas: Toward a secure
+voting system,” in 2008 IEEE Symposium on Security and Privacy
+(sp 2008). IEEE, 2008, pp. 354–368.
+[13] D. Achenbach, C. Kempka, B. Löwe, and J. Müller-Quade, “Improved
+coercion-resistant electronic elections through deniable re-voting,”
+{USENIX} Journal of Election Technology and Systems ( {JETS}),
+vol. 3, pp. 26–45, 2015.
+[14] W. Lueks, I. Querejeta-Azurmendi, and C. Troncoso, “V oteAgain: A
+scalable coercion-resistant voting system,” in 29th USENIX Security
+Symposium (USENIX Security 20) . USENIX Association, Aug.
+2020, pp. 1553–1570. [Online]. Available: https://www.usenix.org/
+conference/usenixsecurity20/presentation/lueks
+[15] M. Jakobsson and A. Juels, “Mix and match: Secure function eval-
+uation via ciphertexts,” in Advances in Cryptology—ASIACRYPT
+2000: 6th International Conference on the Theory and Application of
+Cryptology and Information Security Kyoto, Japan, December 3–7,
+2000 Proceedings 6 . Springer, 2000, pp. 162–177.
+[16] R. Giustolisi, M. S. Garjan, and C. Schuermann, “Thwarting last-
+minute voter coercion,” Cryptology ePrint Archive , 2023.
+[17] R. Küsters, T. Truderung, and A. V ogt, “A game-based definition
+of coercion resistance and its applications,” Journal of Computer
+Security, vol. 20, no. 6, pp. 709–764, 2012.
+[18] D. Bernhard, V . Cortier, D. Galindo, O. Pereira, and B. Warinschi,
+“A comprehensive analysis of game-based ballot privacy definitions,”
+Cryptology ePrint Archive, Paper 2015/255, 2015, https://eprint.iacr.
+org/2015/255. [Online]. Available: https://eprint.iacr.org/2015/255
+[19] B. Adida, “Helios: Web-based open-audit voting.” in USENIX security
+symposium, vol. 17, 2008, pp. 335–348.
+[20] P. Chaidos, V . Cortier, G. Fuchsbauer, and D. Galindo, “Beleniosrf:
+A non-interactive receipt-free electronic voting scheme,” in
+Proceedings of the 2016 ACM SIGSAC Conference on Computer
+and Communications Security , ser. CCS ’16. New York, NY ,
+USA: Association for Computing Machinery, 2016, p. 1614–1625.
+[Online]. Available: https://doi.org/10.1145/2976749.2978337
+[21] C. Killer, B. Rodrigues, E. J. Scheid, M. Franco, M. Eck, N. Zaugg,
+A. Scheitlin, and B. Stiller, “Provotum: A blockchain-based and end-
+to-end verifiable remote electronic voting system,” in 2020 IEEE 45th
+Conference on Local Computer Networks (LCN) . IEEE, 2020, pp.
+172–183.
+[22] T. Haines, J. Müller, and I. Querejeta-Azurmendi, “Scalable coercion-
+resistant e-voting under weaker trust assumptions,” in Proceedings of
+the 38th ACM/SIGAPP Symposium on Applied Computing , 2023, pp.
+1576–1584.
+[23] R. Bendlin, J. B. Nielsen, P. S. Nordholt, and C. Orlandi, “Lower
+and upper bounds for deniable public-key encryption,” in Advances
+in Cryptology–ASIACRYPT 2011: 17th International Conference on
+the Theory and Application of Cryptology and Information Security,
+Seoul, South Korea, December 4-8, 2011. Proceedings 17 . Springer,
+2011, pp. 125–142.
+[24] R. Canetti, C. Dwork, M. Naor, and R. Ostrovsky, “Deniable en-
+cryption,” in Advances in Cryptology—CRYPTO’97: 17th Annual
+International Cryptology Conference Santa Barbara, California, USA
+August 17–21, 1997 Proceedings 17 . Springer, 1997, pp. 90–104.
+[25] R. Canetti, S. Park, and O. Poburinnaya, “Fully deniable interactive
+encryption,” in Advances in Cryptology–CRYPTO 2020: 40th Annual
+International Cryptology Conference, CRYPTO 2020, Santa Barbara,
+CA, USA, August 17–21, 2020, Proceedings, Part I 40 . Springer,
+2020, pp. 807–835.
+[26] A. O’Neill, C. Peikert, and B. Waters, “Bi-deniable public-key en-
+cryption,” in Advances in Cryptology–CRYPTO 2011: 31st Annual
+Cryptology Conference, Santa Barbara, CA, USA, August 14-18,
+2011. Proceedings 31 . Springer, 2011, pp. 525–542.
+[27] M. Bellare, A. Boldyreva, A. Desai, and D. Pointcheval, “Key-privacy
+in public-key encryption,” in Advances in Cryptology — ASIACRYPT
+2001, C. Boyd, Ed. Berlin, Heidelberg: Springer Berlin Heidelberg,
+2001, pp. 566–582.
+[28] R. Cramer, R. Gennaro, and B. Schoenmakers, “A secure and op-
+timally efficient multi-authority election scheme,” in Advances in
+Cryptology - EUROCRYPT ’97, International Conference on the
+Theory and Application of Cryptographic Techniques, Konstanz, Ger-
+many, May 11-15, 1997, Proceeding , ser. Lecture Notes in Computer
+Science, vol. 1233. Springer, 1997, pp. 103–118.
+[29] D. Boneh and P. Golle, “Almost entirely correct mixing with ap-
+plications to voting,” in Proceedings of the 9th ACM conference on
+Computer and communications security , 2002, pp. 68–77.
+[30] A. Faonio and L. Russo, “Mix-nets from re-randomizable and re-
+playable cca-secure public-key encryption,” in International Confer-
+ence on Security and Cryptography for Networks . Springer, 2022,
+pp. 172–196.
+[31] S. S. Chow, J. K. Liu, and D. S. Wong, “Robust receipt-free election
+system with ballot secrecy and verifiability.” in NDSS, vol. 8, 2008,
+pp. 81–94.
+[32] R. Kusters, T. Truderung, and A. V ogt, “Clash attacks on the veri-
+fiability of e-voting systems,” in 2012 IEEE Symposium on Security
+and Privacy. IEEE, 2012, pp. 395–409.
+14
+[33] E. B. Sasson, A. Chiesa, C. Garman, M. Green, I. Miers, E. Tromer,
+and M. Virza, “Zerocash: Decentralized anonymous payments from
+bitcoin,” in 2014 IEEE symposium on security and privacy . IEEE,
+2014, pp. 459–474.
+[34] J. Groth, “On the size of pairing-based non-interactive arguments,” in
+Advances in Cryptology – EUROCRYPT 2016 , M. Fischlin and J.-S.
+Coron, Eds. Berlin, Heidelberg: Springer Berlin Heidelberg, 2016,
+pp. 305–326.
+[35] SCIPR-Lab, “libsnark : a c++ library for zk-snark proofs,” 2014,
+https://github.com/scipr-lab/libsnark.
+[36] M. Albrecht, L. Grassi, C. Rechberger, A. Roy, and T. Tiessen,
+“Mimc: Efficient encryption and cryptographic hashing with minimal
+multiplicative complexity,” in Advances in Cryptology – ASIACRYPT
+2016, J. H. Cheon and T. Takagi, Eds. Berlin, Heidelberg: Springer
+Berlin Heidelberg, 2016, pp. 191–219.
+[37] A. Kosba, Z. Zhao, A. Miller, Y . Qian, H. Chan, C. PAPAMAN-
+THOU, R. Pass, S. ABHI, and E. SHI, “cøcø: A framework for build-
+ing composable zero-knowledge proofs,” Cryptology ePrint Archive,
+Report 2015/1093, 2015. http://eprint. iacr. org . . . , Tech. Rep., 2015.
+[38] D. J. Bernstein, “Curve25519: New diffie-hellman speed records,” in
+Public Key Cryptography - PKC 2006, M. Yung, Y . Dodis, A. Kiayias,
+and T. Malkin, Eds. Berlin, Heidelberg: Springer Berlin Heidelberg,
+2006, pp. 207–228.
+[39] G. Wood et al., “Ethereum: A secure decentralised generalised trans-
+action ledger,” Ethereum project yellow paper , vol. 151, no. 2014,
+pp. 1–32, 2014.
+Appendix A.
+Security games
+A.1. Nullifiable commitment
+Hiding. In Figure 3, let the advantage of the hiding game
+be AdvHiding
+A,Π NC(1λ) =
+Pr[GameHiding
+A,Π NC(1λ) = 1] − 1
+2
+.
+GameHiding
+A,Π NC(1λ) :
+(mpk, msk, ck∗) ← Setup(1λ);
+ck ← KeyGen(mpk, msk, b ←$ {0, 1});
+(m0, m1, aux) ← A(mpk, msk, ck∗, ck);
+c ←$ {0, 1}; r ←$ {0, 1}λ;
+cm ← Commit(ck, mc; r);
+c′ ← A(cm, aux);
+return c = c′;
+Figure 3: Hiding game GameHiding
+A,Π NC
+Indistinguishability of keys (IK) . From the game in Fig-
+ure 4, let the advantage of IK game be AdvIK
+A,Π NC(1λ) =Pr[GameIK
+A,Π NC(1λ) = 1] − 1
+2
+.
+A.2. Secure e-voting systems
+Ballot Privacy.
+Voter Anonymity.
+GameIK
+A,Π NC(1λ) :
+(mpk, msk, ck∗) ← Setup(1λ);
+ck0 ← KeyGen(mpk, msk, b ←$ {0, 1});
+ck1 ← KeyGen(mpk, msk, b′ ←$ {0, 1});
+(m, aux) ← A(mpk, ck∗, ck0, ck1);
+c ←$ {0, 1}; r ←$ {0, 1}λ;
+cm ← Commit(ckc, m; r);
+c′ ← A(cm, aux);
+return c = c′;
+Figure 4: IK game GameIK
+A,Π NC
+GameBP
+A,Π Vote(1λ) :
+(PP, SK) ← Setup(1λ);
+(m0, m1) ← A(PP); b ←$ {0, 1};
+Bb ← V Vote(PP,(id,skid,pkid,ck,mb));
+b′ ← A(PP, Bb);
+return b = b′;
+Figure 5: Ballot privacy game GameBP
+A,Π Vote
+Appendix B.
+Security proofs for Algorithm 1
+We prove the security of Π NC under the Discrete
+Logarithm(DL) assumption and the Decisional Diffie-
+Hellman(DDH) assumption. The DL assumption asserts that
+given a cyclic group G of prime order q with generator g,
+for randomly chosen element h ∈ G, it is computation-
+ally infeasible to determine the unique integer x such that
+h = gx ∈ G in polynomial time. The DDH assumption is
+also defined over a cyclic group G. It states that the distin-
+guishing between the tuple (gx, gy, gxy) and a random tuple
+(gx, gy, gz) is computationally hard for randomly chosen
+x, y, z ←$ Zq.
+Theorem 2.1. If the DL assumption and DDH assumption
+hold in the elliptic curve group G, then for all probabilistic
+polynomial time adversaries A, Π NC in Construction 1,
+satisfies hiding, binding, nullifiability, indistinguishability of
+keys, key deniability, and homomorphism.
+Proof. Hiding. Since a nullifiable commitment scheme has
+a real commitment and a fake commitment, we can define
+the following games from the following cases: given two
+commitments, a hiding adversary A distinguishing 1) fake
+commitments, 2) a fake commitment and a real commitment
+3) real commitments.
+1) GameHiding−FF : This is a hiding game where the
+challenge commitments are always fake. The advantage
+of A guessing a message from the commitments is
+AdvHiding−FF
+A,Π NC (1λ) =
+Pr[GameHiding−FF(1λ) = 1] − 1
+2
+.
+15
+GameV A
+A,Π Vote(1λ) :
+(PP, SK) ← Setup(1λ);
+(skid, pkid, ck) ← V Register(PP,SK,id);
+(m, (pkid,0, ck0), (pkid,1, ck1)) ←
+A(PP, SK, (pkid, ck));
+b ←$ {0, 1}; Bb ← V Vote(PP,(id,skid,b,pkid,b,ckb,m));
+b′ ← A(PP, SK, Bb);
+return b = b′;
+Figure 6: V oter anonymity game GameV A
+A,Π Vote
+2) GameHiding−FR : GameHiding−FR is a hiding game
+in which one of the commitments is fake and the
+other is real. The advantage of A guessing a mes-
+sage from the commitments is AdvHiding−FR
+A,Π NC (1λ) =Pr[GameHiding−FR(1λ) = 1] − 1
+2
+.
+3) GameHiding−RR : In this game, the challenge com-
+mitments are always real commitments. The advantage
+of A guessing a message from the commitments is
+AdvHiding−RR
+A,Π NC (1λ) =
+Pr[GameHiding−RR(1λ) = 1] − 1
+2
+.
+Then, we get, AdvHiding
+A,Π NC(1λ) ≤ AdvHiding−FF
+A,Π NC (1λ) +
+AdvHiding−FR
+A,Π NC +AdvHiding−RR
+A,Π NC (1λ).
+We now show that all advantages on the RHS are
+negligible, thus concluding that AdvHiding
+A,Π NC(1λ) is negligible
+and Π NC ensures hiding.
+GameHiding−FF is a game where the adversary A tries
+to guess a message from two fake commitments, cm0 =
+Commit(ck0, m0, r0) and cm1 = Commit(ck1, m1, r1).
+Since G is a cyclic group, we can map g2 = ga
+1 , g3 =
+gc
+1. Suppose a message m0 is committed using a fake
+key. The casting key is ck0 = (( g1, h1,0), (g2, h2,0)) =
+((g1, gx0
+1 ), (ga
+1 , gx0ρ
+1 )). Then, we get cm0 = (C1,0, C2,0) =
+(gr0
+1 hm0
+1,0, gr0
+2 hm0
+2,0) = (gr0+x0m0
+1 , gar0+x0ρm0
+1 ). From C1,0 =
+gr0
+1 hm0
+1,0 = gr0+x0m0
+1 , since r0 is a random value in Z∗
+q,
+then r0 + x0m0, is uniformly distributed in Z∗
+q. Since the
+adversary cannot distinguish between (gr0
+1 , ga
+1 , gr0a
+1 ) and
+(gr0
+1 , ga
+1 , R) due to DDH where R is a random, the value
+C2,0 = gar0+x0ρm0
+1 also looks like a random element in G.
+The same technique can be used for cm1. All elements
+are uniformly distributed in G, the only probability for the
+adversary to win the game is through random guessing, 1
+2.
+Therefore, we can say AdvHiding−FF
+A,Π NC (1λ) ≤ negl(λ).
+GameHiding−FR is a game where the adversary A tries
+to guess a message from a real commitment and a fake
+commitment, cm0 = Commit(ck0, m0, r0) and cm1 =
+Commit(ck1, m1, r1). Suppose encrypting a real commit-
+ment with a message m0 using a real key. A real
+commitment key ck0 is given as ((g1, h1,0), (g2, h2,0)).
+We can replace g2 = ga, g3 = gc where a, c are
+uniformly chosen in Z∗
+q. Then the real commitment
+cm0 is given by (C1,0, C2,0) = ( gr0
+1 hm0
+1,0, gr0
+2 hm0
+2,0) =
+(gr0+x0m0
+1 , gar0+x0ρm0+cm0
+1 ). Then, both C1,0 = gr0+x0m0
+1
+and C2,0 = gar0+x0ρm0+cm0
+1 look like random elements in
+G due to DDH. As we have shown above, (C1,1, C2,1)also
+look like random elements in G, we can say that a real
+commitment is indistinguishable from a fake commitment.
+Even the msk holder cannot distinguish between them.
+Above, we prove that a fake commitment is indistin-
+guishable from a real one. Since each commitment is indis-
+tinguishable, we have, AdvHiding−FR
+A,Π NC (1λ) ≤ negl(λ).
+GameHiding−RR is a game in which the adversary A tries
+to guess a message from two real commitments, cm0 =
+Commit(ck0, m0, r0) and cm1 = Commit(ck1, m1, r1). Us-
+ing the technique above, all real commitment looks like
+random elements in the elliptic curve group G. Since all
+real commitments are indistinguishable from each other,
+even for the holder of the master secret key msk. We have,
+AdvHiding−RR
+A,Π NC (1λ) ≤ negl(λ).
+From above, we prove that all advan-
+tages AdvHiding−FF
+A,Π NC (1λ), AdvHiding−FR
+A,Π NC (1λ) and
+AdvHiding−RR
+A,Π NC (1λ) are negligible, we have that
+AdvHiding
+A,Π NC(1λ) ≤ negl(λ).
+Binding. We can apply a simple technique to prove binding
+in the Pedersen commitment scheme. A commitment is
+defined as cm = Commit(ck, m, r) = (gr
+1hm
+1 , gr
+2h2
+m). Using
+contradiction, suppose our scheme is not ensuring binding
+and we can compute m′, r′ such that cm = (gr′
+1 hm′
+1 , gr′
+2 h2
+m′
+)
+and m ̸= m′ and r ̸= r′. Then, we get gr
+1hm
+1 = gr′
+1 hm′
+1 and
+gr
+2h2
+m = gr′
+2 h2
+m′
+. In the first equation, we can solve the
+discrete logarithm problem that logh1
+g1 = (r − r′)/(m′ − m).
+For the second equation, we can also solve the discrete loga-
+rithm problem that logh2
+g2 = (r −r′)/(m′ −m). These violate
+the DL assumption. Therefore, finding such m, m′, r, r′ that
+satisfy these conditions is infeasible, ensuring the binding
+of the commitment scheme.
+Nullifiability. Given a master secret key msk, and a com-
+mitment cm = (gr
+1hm
+1 , gr
+2hm
+2 ), we can nullify a commitment
+and map it to another commitment cm∗. A manager has
+a master secret key and generates another commitment
+cm∗ = C2
+Cmsk
+1
+. This commitment still ensures hiding and bind-
+ing and can be opened with ck∗ and a nullifiable message.
+From cm∗ = C2
+Cmsk
+1
+= gr
+2 hm
+2
+(gr
+1 hm
+1 )ρ = ( g2
+gρ
+1
+)r · gb·m
+3 . Simply, r is
+uniformly random, and cm∗ is hiding commitment including
+the manager. Also, it is a form of the Pedersen com-
+mitment, binding is straightforward. From cm∗, we show
+Open(ck∗, cm∗, b · m, r) = 1 . Since this is a commitment
+scheme, later the committer will provide or the manager
+will find the original message. Then, the manager can open
+the commitment from ck∗ = ( g∗, h∗) = ( g2/gρ
+1 , g3) by
+checking if cm∗ = g∗rh∗b·m. Since cm∗ = ( g2
+gρ
+1
+)r · gb·m
+3 =
+g∗rh∗b·m, Open outputs 1.
+Indistinguishability of keys (IK) . Consider a game in
+which, given a commitment cm, an IK adversary A attempts
+to distinguish which commitment key has been used. Given
+that a nullifiable commitment scheme possesses both a real
+commitment key and a fake commitment key, we can define
+the games from the following scenarios: given a commit-
+16
+ment, an IK adversary A distinguishing which commitment
+key was used between 1) two fake keys, 2) a fake key and
+a real key 3) two real keys.
+• GameIK−FF : GameIK−FF is a game where a com-
+mitment is generated with a randomly chosen com-
+mitment key among two fake keys. A tries to distin-
+guish which key has been used. Let AdvIK −F F
+A,Π NC (1λ) =Pr[GameIK−FF(1λ) = 1] − 1
+2
+ be the advantage.
+• GameIK−FR : GameIK−FR is a game where given a com-
+mitment generated with a randomly chosen commitment
+key among one fake key and one real key to A. A tries to
+distinguish which key has been used. Let the advantage
+be AdvIK −F R
+A,Π NC (1λ) =
+Pr[GameIK−FR(1λ) = 1] − 1
+2
+.
+• GameIK−RR : GameIK−RR is a game where a com-
+mitment is generated with a randomly chosen com-
+mitment key among two real keys. A tries to distin-
+guish which key has been used. Let AdvIK −RR
+A,Π NC (1λ) =Pr[GameIK−RR(1λ) = 1] − 1
+2
+ be the advantage.
+Then, we get AdvIK
+A,Π NC(1λ) ≤ AdvIK−FF
+A,Π NC(1λ) +
+AdvIK−FR
+A,Π NC(1λ) + AdvIK−RR
+A,Π NC(1λ).
+In the game GameIK−FF, A is provided two fake com-
+mitment keys, (h1,0, h2,0) and (h1,1, h2,1), A then sub-
+mits two keys along with a message m. A commitment
+cm = (C1,c, C2,c) is created using a randomly selected key
+ckc = (h1,c, h2,c) where c ∈ {0, 1}.
+Consider the element C1,c of the commitment. Regard-
+less of c, C1 = gr
+1h0
+m becomes random since gr
+1 is random.
+In addition, both C2,0 = gar
+1 h2,0
+m, and C2,1 = gar
+1 h2,1
+m are
+random since gar
+1 is indistinguishable from random due to
+DDH for given g2 = ga
+1, and gr
+1. Therefore, the probability
+that GameIK−FF(1λ) = 1 is equivalent to random guessing,
+which is 1
+2. We have AdvIK −F F
+A,Π NC (1λ) is negligible.
+In the game GameIK−FR, suppose ck0 is a fake key and
+ck1 is a real key. Using the same technique as above, we
+have C2,c = gr
+2hm
+2,c = gar0
+1 hm
+2,c. Since gar
+1 is random due
+to DDH, C2,c is random. Pr[GameIK−FR(1λ) = 1] = 1
+2, and
+hence, AdvIK −F R
+A,Π NC (1λ) is negligible.
+In the game GameIK−RR where both ck0 and ck1 are all
+real keys, due to DDH, the adversary cannot distinguish the
+commitment from random without knowing opening key r.
+Then, we can get Pr[GameIK−RR(1λ) = 1] = 1
+2, implying
+that AdvIK −RR
+A,Π NC (1λ) is negligible.
+All advantages in the RHS are negligible, therefore,
+AdvIK
+A,Π NC(1λ) is negligible.
+Key deniability . From a simulator SimKeyProve that out-
+puts an accepting proof π′
+ck without a master secret key
+msk.
+From π′
+key, we have p′ = hk′
+1 /(h2/gb′
+3 )c′
+. Since k′ and
+c′ are randomly chosen from Z∗
+q, gb′c′
+3 can be represented
+to hx
+1 for any random r. We can say that p′ = hr
+1 where
+r is random. Comparing to the real proof πkey = ( ht
+1),
+t is also a random. Each element in the real proof set
+(ht
+1, k, c, b) has the same distribution as ones in the sim-
+ulated proof set (hr
+1, k′, c′, b′). The two proofs are in-
+distinguishable and SimKeyProve can always outputs 1,
+since hk′
+1 = p′(h2/gb′
+)c′
+. For a fake commitment key
+ck = ((g1, h1), (g2, h2)) = (( g1, h1), (g2, hρ
+1) and its proof
+πck, we can also simulate a proof that ck is a real key.
+From SimKeyProve(mpk, ck, b′ = 1), we set random k′, c′
+and generate p′ = hk′
+1 /(h2/gb′
+3 )c′
+= hk′
+1 /(hρ
+1/g3)c′
+= hr
+1
+for some random r. This simulated proof is indistinguish-
+able from real proof. And, p′ can pass the verification
+hk
+1 = p(h2/gb
+3)c. If the committer claims this is a real
+commitment key, b = 1 in the verification. Then, we can
+get hk′
+1 = ( hk′
+1 /(hρ
+1/g3)c′
+)(h2/g3)c′
+= hk′
+1 , passing the
+verification. The opposite case is straightforward.
+Homomorphism. Consider two commit-
+ments where h = gx
+1 cm0 = ( gr0
+1 hm0
+1,0,
+gr0
+2 hm0
+2,0) = ( gr0+x0m0
+1 , gr0
+2 gx0ρm0
+1 gb0m0
+3 ) and
+cm1 = ( gr1
+1 hm1
+1,1, gr1
+2 hm1
+2,1) = ( gr1+x1m1
+1 , gr1
+2 gx1ρm1
+1 gb1m1
+3 ).
+We can aggregate two commitments P cm = cm0 + cm1 =
+(gr0+x0m0+r1+x1m1
+1 ,
+gr0+r1
+2 gx0ρm0+x1ρm1
+1 gb0m0+b1m1
+3 ). Then, a manager can
+nullify commitments and map to new commitments
+cm∗ = Nullify(msk,P cm) = C2/(Cmsk
+1 ) =
+gr0 +r1
+2 gx0 ρm0 +x1 ρm1
+1 gb0m0 +b1m1
+3
+(gr0 +x0m0 +r1 +x1m1
+1 )ρ = ( g2/gρ
+1)r0+r1 gb0m0+b1m1
+3 .
+We can now open cm∗ with ck∗,P b · m,P r,
+Open(ck∗, cm∗,P b · m,P r) = (g2/gρ
+1)
+P rg
+P b·m
+3 = cm∗.
+Thus, we can infer that homomorphism always holds.
+Appendix C.
+Security proofs for Verifiability
+We adapt Cortier’s definition of verifiability [9] to ensure
+the integrity of zkVoting. In a nutshell, a voting scheme is
+verifiable if the election result reflects the votes of 1) all
+honest voters who have verified that their ballots appear
+correctly on the bulletin board; 2) a subset of honest voters
+who did not verify their ballots; and 3) at most nc voters
+under the control of an adversary. Notably, in our scheme, a
+registrar is not trusted to ensure verifiability, which is known
+as strong verifiability meaning that both individual verifia-
+bility and universal verifiability are ensured. In addition, in
+scenarios such as clash attacks [32] where two voters vote
+for the same candidate, malicious voting devices or authority
+could deceive the voters with the same ballot. Two voters
+do not realize they are looking at the same ballot. This can
+satisfy both individual verifiability and universal verifiability
+but is not sufficient for E2E verifiability. Malicious authority
+could replace one ballot in an undetectable way. Therefore,
+voter names or pseudonyms should be attached to the ballot
+to satisfy E2E verifiability [10]. Our system attaches a serial
+number to ballots and allows the voter to trace their ballot
+through the entire voting system, ensuring each ballot is
+unique.
+The verifiability experiment is formally illustrated
+in Figure 7. We use U to denote the set of
+(id, pkid, skid, ckid, B) pairs and C to denote the set
+of (id, pkid, ckid, B) where nc be the number of the
+set of corrupted voters. Let H = {(pkh
+i , ckh
+i , mh
+i , ∗)}nh
+i=1
+correspond to voters who have checked that their ballots
+17
+Expver
+A,Π Vote
+(1λ) :
+(PP, SK) ← Setup(1λ);
+(BB, T ) ← AO(SK);
+if VerifyTally(PP, T ) = 0 then return 0;
+if mtally = 0 then return 0;
+H = {(pkh
+i , ckh
+i , mh
+i , ∗)}nh
+i=1; H ′ = {(pkh′
+i , ckh′
+i , mh′
+i , ∗)}
+nh′
+i=1;
+if ∃{(pkc
+i , ckc
+i , mc
+i , ∗)}nc
+i=1 ⊆ C,
+∃{(pkh′
+i , ckh′
+i , mh′
+i , ∗)}
+nh′
+i=1 ⊆ H ′
+s.t. mtally = ρ({(pkh
+i , ckh
+i , mh
+i , Bh
+i )}nh
+i=1∪
+{(pkh′
+i , ckh′
+i , mh′
+i , Bh′
+i )}
+nh′
+i=1 ∪ {(pkc
+i , ckc
+i , mc
+i , Bc
+i )}nc
+i=1) then
+return 0;
+else return 1;
+OCorrupt(id) :
+if (id, ∗, ∗, ∗, ∗) /∈ U then return 0;
+C ⇐ {(id, pkid, ckid, ∗)};
+return (pkid, skid, ckid);
+OVote(id, m) :
+if (id, ∗, ∗, ∗, ∗) /∈ U or (id, ∗, ∗, ∗) ∈ C then return 0;
+(k, B) ← Vote(PP, ckid, CKlist, pkid, skid, m);
+H ∪ H ′ ⇐ (pkid, ckid, m, B);
+return (k, B);
+Figure 7: Verifiability experiment Expver
+A,Π Vote(1λ)
+will be counted and H ′ = {(pkh′
+i , ckh′
+i , mh′
+i , ∗)}nh′
+i=1
+correspond to voters that have not checked their ballots.
+We adapt the result function ρ for the election result. The
+adversary A takes as input the authority’s secret key SK,
+and can query the following oracles:
+• OCorrupt(id), which allows the adversary A to corrupt
+a voter id.
+• OVote(id, m), which allows the adversary A to let an
+honest voter id cast a vote for m.
+Note that A does not need the ORegister oracle since he
+controls the authority and thus can register arbitrarily. The
+adversary wins if the result T verifies but violates any of the
+following conditions: 1) for each voter that has checked his
+ballot, the ballot is counted; 2) a subset of votes by honest
+voters that did not check their ballots are counted; 3) at most
+nc corrupted votes are counted.
+Definition C.1. We say that Π Vote is E2E verifiable
+if the advantage of any PPT adversary A such that
+Pr[Expver
+A,Π Vote(1λ) = 1] is negligible and the ballot contains
+a unique identifier.
+Theorem C.1. Assume that the underlying ZKPs are com-
+plete, sound, and zero-knowledge, and the security of the
+cryptographic hash function. A voting system Π Vote provides
+E2E verifiability.
+Proof. Let the adversary A output a set of votes, and the
+tally result T including the proof. Let {B1, · · · , Bnb } be
+the valid ballots on the BB. By the soundness of the ZKP
+relation Rtally and the homomorphism and nullifiability
+property of the nullifiable commitment scheme, we can
+conclude that T is the correct tally of {B1, · · · , Bnb } if
+VerifyTally(PK, T ) returns 1.
+Now, we prove that for each ballot Bi ∈ BB , it is one
+of the following sets:
+• H = {(pkh
+i , ckh
+i , mh
+i , ∗)}nh
+i=1, the votes of the honest
+voters who have checked their ballots.
+• H ′ = {(pkh′
+i , ckh′
+i , mh′
+i , ∗)}nh′
+i=1, the votes of the honest
+voters who have not checked their ballots.
+• C = {(pkc
+i , ckc
+i , mc
+i , ∗)}nc
+i=1, the votes of the corrupted
+voters.
+Due to the cryptographic hash function H, it is impossi-
+ble for an adversary to forge a valid secret key skid that cor-
+responds to a given public key pkid where pkid = H(skid).
+The ZKP relation Rtotal ensures that the registrar can only
+generate at most nv number of real casting keys. The
+soundness of the ZKP relation Rck ensures that the casting
+keys cks are formed correctly as the voter required. Another
+ZKP relation, Rvote, verifies the membership of each voter’s
+casting key in the system. As a result, the adversary cannot
+produce a valid proof for Rvote. Therefore, any ballot that
+does not align with the ballots of honest voters will be identi-
+fied and excluded from the count. This rigorous verification
+process ensures that only ballots associated with verified
+casting keys and legitimate voter identities are tallied.
+We now prove that the adversary cannot drop the votes
+of the honest voters who have checked their ballots. By
+the soundness of the ZKP relation Rvote, the adversary
+cannot cast a valid ballot created with a ck for pkid due
+to the cryptographic hash function H, it is impossible for
+an adversary to forge a valid secret key skid that corresponds
+to a given public key pkid where pkid = H(skid). We can
+have that if the result mtally verifies, then it must correspond
+to the result of the tally function ρ computed on all the
+votes by honest voters who checked their ballots, at most
+nc votes cast by corrupted voters, and a subset of votes cast
+by honest voters who did not check their ballots. We can
+observe that Expver
+A,Π Vote(1λ) = 1] is negligible and each ballot
+contains a unique serial number, therefore, Π Vote ensures
+E2E verifiability.
+18

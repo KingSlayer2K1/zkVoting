@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>zkVoting Prototype</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero card">
+        <p class="eyebrow">Zero-Knowledge E-Voting</p>
+        <h1>zkVoting Prototype</h1>
+        <p class="subtitle">
+          Paper-aligned flow: register voter, cast with ZK proof, enforce one-vote with serial nullifier, and publish anonymous tally.
+        </p>
+        <p id="backendStatus" class="badge neutral">Checking backend...</p>
+      </header>
+
+      <section class="card" id="electionCard">
+        <h2>Election</h2>
+        <p id="electionName">Loading election...</p>
+        <p id="electionMeta" class="muted"></p>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Step 1: Register</h2>
+          <form id="registerForm" class="stack">
+            <label for="identityTag">Identity Tag (unique)</label>
+            <input
+              id="identityTag"
+              name="identityTag"
+              placeholder="example: student-2026-001"
+              required
+            />
+            <button type="submit">Register Voter</button>
+          </form>
+          <p id="registerMessage" class="muted"></p>
+          <div id="credentialBox" class="credential hidden">
+            <h3>Issued Credentials</h3>
+            <pre id="credentialText"></pre>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2>Step 2: Cast Vote</h2>
+          <form id="voteForm" class="stack">
+            <fieldset id="candidateFieldset" class="choices">
+              <legend>Choose Candidate</legend>
+              <div id="candidateOptions" class="optionList"></div>
+            </fieldset>
+            <button type="submit" id="castButton" disabled>Cast Verified Vote</button>
+          </form>
+          <p id="voteMessage" class="muted"></p>
+          <div id="receiptBox" class="receipt hidden">
+            <h3>Vote Receipt</h3>
+            <pre id="receiptText"></pre>
+            <button id="verifyReceiptButton" type="button">Verify Receipt on Board</button>
+            <p id="receiptVerifyMessage" class="muted"></p>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Live Stats</h2>
+          <button id="refreshStatsButton" type="button">Refresh Stats</button>
+          <pre id="statsText" class="panel">Loading...</pre>
+        </article>
+
+        <article class="card">
+          <h2>Step 10: Tally</h2>
+          <button id="loadTallyButton" type="button">Load Anonymous Tally</button>
+          <div id="tallyContainer" class="panel">No tally loaded yet.</div>
+        </article>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

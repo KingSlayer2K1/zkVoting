@@ -1,0 +1,31 @@
+{
+  "name": "zkvoting",
+  "version": "1.0.0",
+  "description": "Zero-Knowledge Proof Based Secure E-Voting System (zkVoting)",
+  "private": true,
+  "scripts": {
+    "backend:dev": "npm --prefix backend run dev",
+    "backend:start": "npm --prefix backend run start",
+    "zk:circom": "scripts\\bin\\circom.exe --version",
+    "zk:snarkjs": "snarkjs --help",
+    "zk:step3": "powershell -ExecutionPolicy Bypass -File .\\scripts\\powershell\\step3-compile-and-setup.ps1",
+    "zk:step4": "powershell -ExecutionPolicy Bypass -File .\\scripts\\powershell\\step4-proof-and-verify.ps1"
+  },
+  "keywords": [
+    "zk",
+    "circom",
+    "snarkjs",
+    "evoting"
+  ],
+  "author": "zkVoting Team",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "circom2": "^0.2.22",
+    "snarkjs": "^0.7.6"
+  },
+  "dependencies": {
+    "circomlib": "^2.0.5",
+    "circomlibjs": "^0.1.7"
+  }
+}
