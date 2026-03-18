@@ -68,7 +68,7 @@ It demonstrates cryptographic workflow and system design, but does not yet provi
 From project root:
 
 ```powershell
-cd "c:\Users\HP\Desktop\IITP Study Material\2ndSem\Crypto\zkVoting"
+cd zkVoting
 ```
 
 ### 1. Install dependencies
