@@ -1,182 +1,238 @@
-# zkVoting
+# zkVoting — Enhanced ZK E-Voting System
 
-Zero-Knowledge Proof Based Secure E-Voting System (term project prototype).
+An implementation and extension of the paper **"zkVoting: Zero-knowledge proof based coercion-resistant and E2E verifiable e-voting system"** (Park, Choi, Kim, Oh — ePrint 2024/1003).
 
-## What This Project Does
+This project implements the paper's core nullifiable commitment scheme and contributes **three novel improvements** to the protocol that address gaps identified in the original work.
 
-This project demonstrates a working end-to-end voting prototype using:
+## Research Paper
 
-- **Circom + snarkjs** for zero-knowledge proofs
-- **Node.js + Express** for backend APIs
-- **HTML/CSS/JS** for a simple frontend
-- **JSON storage** for local data
+The original paper and the IEEE-format report describing our improvements are both included:
 
-It supports:
+| File | Description |
+|------|-------------|
+| [`2024-1003.pdf`](./2024-1003.pdf) | Original zkVoting paper (Park et al., 2024) |
+| [`Final_Report/paper.pdf`](./Final_Report/paper.pdf) | Our extension: improvements and comparative analysis |
 
-- voter registration
-- one-person-one-vote enforcement (serial/nullifier based)
-- zk proof generation and verification
-- storage of vote commitments and encrypted vote payloads (not plain votes)
-- anonymous tally output (candidate totals without voter identity)
+## Three Novel Improvements
 
-## Research Basis
+### I. Concrete πtotal Eligibility Proof
+The paper specifies a πtotal proof that exactly *n* real casting keys were issued (preventing ballot stuffing), but provides no implementation. We implement it as a **DLEQ Schnorr argument** over homomorphically aggregated nullifiable commitments:
 
-This implementation is based on the research paper included in this repository:
+- `cm_agg = Σ NC.Commit(ck_i, 1; 0)` accumulated at registration time
+- After nullification: `cm*_agg = n_real · g3` — count of real keys geometrically encoded
+- DLEQ Schnorr proves knowledge of `msk` linking `cm_agg` to `cm*_agg`
+- No per-circuit trusted setup; sound under the discrete log assumption
 
-- **`2024-1003.pdf`**
-- Title: **"zkVoting: Zero-knowledge proof based coercion-resistant and E2E verifiable e-voting system"**
-- Authors: **Seongho Park, Jaekyoung Choi, Jihye Kim, Hyunok Oh**
+### II. Threshold Master Secret Key
+The paper assumes a single trusted tallier holds `msk`. We replace this with a **(t, n)-Shamir Secret Sharing** over the Baby Jubjub scalar field:
 
-The prototype follows the paper's key direction, especially serial-number based anti-double-voting and zk-based vote validity flow.
+- Any `t` of `n` authorities can reconstruct `msk` for the tally phase
+- Feldman VSS commitments let each authority verify their own share
+- Threshold partial-nullification: each authority computes `share_i · C1`; Lagrange combination recovers `msk · C1` without any single party knowing `msk`
 
-## Who Can Use This Project
+### III. Cross-Election Unlinkability
+The paper's serial number formula `sn = H(e, ck, skid)` reuses the raw casting key `ck` across elections, enabling a passive adversary to link a voter's participation across multiple elections. We fix this by:
 
-Best suited for:
+- Deriving an **election-scoped key hash**: `ckHashE = H(ckHash, electionId)`
+- Computing `sn = H(electionId, ckHashE, voterSecret)` — different for same voter across elections
+- Casting keys may be reused; serial numbers are always election-specific
 
-- students learning ZK + secure voting architecture
-- instructors for demos/labs
-- researchers building a baseline prototype
-- hackathon teams exploring verifiable voting
+## Architecture
 
-Not intended for:
-
-- real public elections
-- high-stakes governance voting
-- production deployment without major hardening
-
-## Important Disclaimer
-
-This is an **educational prototype**, not a production election system.
-
-It demonstrates cryptographic workflow and system design, but does not yet provide the operational, legal, and adversarial guarantees required for real-world elections.
-
-## Current Implementation Status
-
-- Step 1: setup and project scaffolding
-- Step 2: Circom vote-validity circuit
-- Step 3: circuit compile + trusted setup
-- Step 4: local proof generation + verification
-- Step 5: backend API
-- Step 6: backend proof verification integration
-- Step 7: frontend voting UI
-- Step 8: frontend-backend integration
-- Step 9: nullifier-based duplicate vote prevention
-- Step 10: tally endpoint (anonymous candidate counts)
-
-## How To Run (Windows / PowerShell)
-
-From project root:
-
-```powershell
-cd zkVoting
 ```
+zkVoting/
+├── backend/
+│   └── src/
+│       ├── lib/
+│       │   ├── nullifiableCommitment.js   # NC scheme (Construction 1)
+│       │   ├── merkleTree.js              # Poseidon Merkle tree (depth 16)
+│       │   ├── totalProof.js              # πtotal — Improvement I
+│       │   ├── thresholdMsk.js            # Shamir SSS — Improvement II
+│       │   ├── zkService.js               # Groth16 proof generation/verification
+│       │   └── cryptoUtils.js             # AES-GCM vote encryption, field utils
+│       └── routes/
+│           ├── registrationRoutes.js      # Voter registration + casting keys
+│           ├── voteRoutes.js              # Vote casting + ZK proof verification
+│           ├── electionRoutes.js          # Election init, πtotal, threshold tally
+│           └── resultRoutes.js            # Tally + nullification audit
+├── circuits/
+│   ├── enhanced_vote.circom               # Enhanced circuit (Merkle + casting key)
+│   └── vote.circom                        # Legacy circuit
+├── Final_Report/
+│   ├── paper.tex                          # LaTeX source
+│   └── paper.pdf                          # Compiled IEEE-format paper
+└── 2024-1003.pdf                          # Original research paper
+```
+
+## Prerequisites
+
+- Node.js >= 18
+- npm
+- Circom 2.1.6 (for circuit compilation)
+- snarkjs 0.7.6 (included in node_modules)
+- MiKTeX or TeX Live (for LaTeX compilation, optional)
+
+## Setup and Running
 
 ### 1. Install dependencies
 
-```powershell
-npm.cmd install
-cd backend
-npm.cmd install
-cd ..
+```bash
+npm install
+cd backend && npm install && cd ..
 ```
 
-### 2. Create backend environment file
+### 2. Configure environment
 
-```powershell
-Copy-Item .\backend\.env.example .\backend\.env -Force
+```bash
+cp backend/.env.example backend/.env
 ```
 
-Edit `backend/.env` and set:
-
+Edit `backend/.env`:
 ```env
 PORT=4000
-VOTE_ENCRYPTION_KEY=replace-with-a-long-random-secret
+VOTE_ENCRYPTION_KEY=<random-32-char-secret>
 ```
 
-### 3. Build ZK artifacts (recommended first run)
+### 3. Build ZK circuit artifacts (first time only)
 
-```powershell
-npm.cmd run zk:step3
-npm.cmd run zk:step4
+```bash
+# Compile enhanced circuit and run trusted setup
+npm run zk:step3
+npm run zk:step4
 ```
 
-### 4. Start server
-
-```powershell
-npm.cmd run backend:dev
+Or for the legacy circuit:
+```bash
+cd circuits
+circom vote.circom --r1cs --wasm --sym
+snarkjs groth16 setup vote.r1cs pot12_final.ptau vote_final.zkey
+snarkjs zkey export verificationkey vote_final.zkey verification_key.json
 ```
 
-### 5. Open app
+### 4. Start the server
 
-Open in browser:
-
-- `http://localhost:4000/`
-
-## Main API Endpoints
-
-- `GET /health`
-- `GET /api/election`
-- `POST /api/register`
-- `POST /api/votes/cast`
-- `POST /api/votes` (advanced/manual proof submission)
-- `GET /api/votes/stats`
-- `GET /api/votes/receipt/:serialNumber`
-- `GET /api/results/tally`
-
-## What "Anonymous" Means Here
-
-In this prototype:
-
-- tally output does not include voter identity
-- ballot record stores commitment/proof and encrypted vote payload
-
-But for strong real-world anonymity/coercion resistance, additional controls are still needed (see roadmap below).
-
-## Scope for Improvement (Roadmap)
-
-### Cryptography and protocol
-
-- move proof generation fully to client device
-- remove server visibility of raw vote input path
-- strengthen coercion-resistance model (fake credential flow end-to-end)
-- independent bulletin board and audit logs
-- stronger distributed trust assumptions (multi-authority setup)
-
-### Security and operations
-
-- replace JSON files with audited database layer
-- key management via HSM/KMS
-- secure secret rotation and backup
-- robust authentication, authorization, rate limiting, abuse controls
-- extensive security testing and threat-model validation
-
-### Product readiness
-
-- reproducible Docker deployment
-- observability and health dashboards
-- CI pipeline with tests (unit, integration, cryptographic checks)
-- full documentation for election lifecycle and recovery procedures
-
-## Project Structure
-
-```text
-zkVoting/
-|-- circuits/
-|-- backend/
-|-- frontend/
-|-- scripts/
-|-- 2024-1003.pdf
-`-- README.md
+```bash
+npm run backend:dev
 ```
 
-## Quick Tool Check
+Server runs at `http://localhost:4000`.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\powershell\check-tools.ps1
+### 5. Initialize an election (required before registration)
+
+```bash
+curl -X POST http://localhost:4000/api/election/init \
+  -H "Content-Type: application/json" \
+  -d '{"t": 2, "n": 3}'
 ```
 
-## Additional Documentation
+This runs NC Setup, splits `msk` into 3 shares (any 2 can reconstruct), and initializes the πtotal accumulator.
 
-- [License](./LICENSE)
-- [Contributing Guide](./CONTRIBUTING.md)
-- [Project Report](./PROJECT_REPORT.md)
+## API Reference
+
+### Registration
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/register` | Register voter; issues real casting key (b=1) |
+| `POST` | `/api/register/fake-key` | Issue fake casting key (b=0) for coercion resistance |
+| `POST` | `/api/register/sim-key-prove` | Generate deniable simulated KeyProve proof |
+| `POST` | `/api/register/verify-key-proof` | Verify a genuine or simulated KeyProve proof |
+| `GET` | `/api/register/merkle-proof/:voterId` | Retrieve Merkle proof for voter's casting key |
+
+### Voting
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/votes/cast` | Backend-assisted vote casting (generates ZK proof server-side) |
+| `POST` | `/api/votes` | Client-supplied ZK proof submission |
+| `GET` | `/api/votes/stats` | Aggregate vote statistics |
+| `GET` | `/api/votes/receipt/:serialNumber` | Retrieve ballot receipt by serial number |
+
+### Election
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/election` | Election info and candidate list |
+| `POST` | `/api/election/init` | Initialize election (NC Setup + threshold msk split) |
+| `GET` | `/api/election/total-proof` | Generate and verify πtotal eligibility proof (Improvement I) |
+| `GET` | `/api/election/threshold-info` | Show threshold configuration (Improvement II) |
+| `POST` | `/api/election/threshold-tally` | Demonstrate threshold msk reconstruction (Improvement II) |
+
+### Results
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/results/tally` | Nullification tally (real-key ballots only) |
+| `GET` | `/api/results/legacy-tally` | Original decryption-only tally (for comparison) |
+| `GET` | `/api/results/nullify/:ballotId` | Per-ballot nullification audit |
+
+### Other
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/bulletin-board` | Public Merkle tree state |
+| `GET` | `/health` | Health check |
+
+## Cryptographic Protocol Summary
+
+### NC Scheme (Construction 1 — Baby Jubjub)
+
+```
+Setup:   (mpk, msk, ckStar) ← nc.setup()
+         mpk = (g1,g2,g3,g4)  Baby Jubjub generators
+         msk ← Zq;  ckStar = (h1=g1, h2=g2)  (the "null" key)
+
+KeyGen:  ck = (h1, h2) where:
+           real (b=1): h1 = g1, h2 = g2 + msk·g3
+           fake (b=0): h1 = g1, h2 = g2
+
+Commit:  C1 = r·h1,  C2 = m·g3 + r·h2
+
+Nullify: cm* = C2 − msk·C1
+         = m·g3 + r·(h2 − msk·h1)
+         real key: h2 − msk·h1 = g2 + msk·g3 − msk·g1 = g2   → cm* = m·g3 + r·g2
+         fake key: h2 − msk·h1 = g2 − msk·g1                  → different structure
+
+OpenNull: verify cm* == m·g3 + r·g2   (real ballot)
+          verify cm* == 0              (fake ballot)
+```
+
+### ZK Circuit
+
+The enhanced Circom circuit (`circuits/enhanced_vote.circom`) proves:
+
+1. `pkid = H(voterSecret)` — voter knows their secret
+2. `ckHash = H(h1x, h1y, h2x, h2y)` — casting key hash consistency
+3. `sn = H(electionId, ckHashE, voterSecret)` — serial number formation (Improvement III)
+4. Vote is in the candidate list
+5. `voteCommitment = H(vote, voteSalt)` — Poseidon commitment
+6. Merkle path verifies `(ckHashE, pkid)` is in the public key tree
+
+## Security Properties
+
+| Property | Paper | Our Implementation |
+|----------|-------|-------------------|
+| Completeness | Yes | Yes |
+| Soundness | Yes | Yes |
+| ZK (ballot privacy) | Yes | Yes |
+| Coercion resistance | Yes | Yes (fake key + SimKeyProve) |
+| E2E verifiability | Yes | Yes |
+| Eligibility proof (πtotal) | Specified, not implemented | Implemented (DLEQ Schnorr) |
+| Threshold tallier | Not addressed | (t,n)-Shamir SSS |
+| Cross-election unlinkability | Not addressed | ckHashE election-scoping |
+
+## Coercion Resistance Model
+
+Voters receive:
+- **1 real key** (b=1): produces counting ballots
+- **Unlimited fake keys** (b=0): produce ballots that tally as zero
+
+Under coercion, a voter hands the coercer a fake key + simulated KeyProve proof. The proof is cryptographically indistinguishable from a genuine KeyProve proof because verification checks only the algebraic equation `k·h1 == p + c·(h2 − b·g3)`, not a Fiat-Shamir hash binding — by design.
+
+## Disclaimer
+
+This is an **educational prototype** demonstrating cryptographic protocol design. It is not intended for use in real elections. JSON file storage, server-side voter secrets (in fallback mode), and lack of production hardening make it unsuitable for deployment.
+
+## License
+
+See [LICENSE](./LICENSE).

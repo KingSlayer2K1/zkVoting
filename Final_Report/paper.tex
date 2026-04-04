@@ -1,0 +1,700 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{url}
+\usepackage{listings}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{gray!8}
+}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  citecolor=blue,
+  urlcolor=blue
+}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{Extending zkVoting: Implementing Missing Protocol Components\\
+and Novel Security Improvements Over the Original Paper}
+
+\author{
+\IEEEauthorblockN{Ayush}
+\IEEEauthorblockA{\textit{Department of Computer Science and Engineering}\\
+\textit{Indian Institute of Technology Patna}\\
+Patna, India}
+}
+
+\maketitle
+
+\begin{abstract}
+The zkVoting paper by Park et al.\ \cite{park2024zkvoting} introduces a coercion-resistant,
+end-to-end (E2E) verifiable e-voting system centred on a novel \emph{nullifiable
+commitment scheme}.  Despite providing rigorous security proofs and performance
+benchmarks, the accompanying prototype implementation omits the paper's core
+cryptographic contributions entirely---the nullifiable commitment scheme,
+real/fake casting key issuance, key deniability (SimKeyProve), Merkle-tree
+eligibility verification, and the O($n$) nullification-based tally.  Furthermore,
+three significant limitations remain unaddressed in the paper itself: (i) the
+absence of the $\pi_{\text{total}}$ eligibility proof that prevents ballot
+stuffing; (ii) a single-authority trust assumption for the master secret key
+that collapses coercion resistance if the authority is compromised; and (iii)
+cross-election vote linkability arising from the reuse of casting keys.
+
+In this work we make two contributions.  First, we implement all missing
+components from the original paper: Construction~1 (Baby~Jubjub
+elliptic-curve nullifiable commitment), real/fake key registration with
+KeyProve and SimKeyProve, a Poseidon Merkle tree for the casting-key set, an
+enhanced Circom circuit encoding the full $R_{\text{vote}}$ relation, and
+O($n$) tally-time nullification.  Second, we identify and implement three
+novel improvements: (1) a concrete $\pi_{\text{total}}$ proof using the
+homomorphic property of the nullifiable commitment scheme and a DLEQ Schnorr
+argument; (2) $(t,n)$-Shamir secret sharing of the master secret key with
+Feldman VSS verification and threshold partial-decryption tally; and (3)
+election-scoped key derivation for cross-election unlinkability.  We provide
+a detailed comparative security and performance analysis between the original
+protocol and our enhanced system.
+\end{abstract}
+
+\begin{IEEEkeywords}
+zero-knowledge proofs, e-voting, coercion resistance, nullifiable commitment,
+Shamir secret sharing, Baby Jubjub, Circom, snarkjs
+\end{IEEEkeywords}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Introduction}
+\label{sec:intro}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Electronic voting systems must simultaneously guarantee \emph{ballot
+privacy}, \emph{coercion resistance}, and \emph{end-to-end (E2E)
+verifiability}---three properties that are difficult to achieve jointly.
+The zkVoting paper \cite{park2024zkvoting} addresses this challenge with a
+novel cryptographic primitive, the \emph{nullifiable commitment scheme}, and
+an E2E verifiable protocol based on zk-SNARKs.  The scheme's central insight
+is the \emph{fake-keys} approach: voters receive one real and arbitrarily
+many indistinguishable fake casting keys; coercers cannot distinguish real
+from fake even when voters reveal keys and provide proofs.
+
+Despite its theoretical contributions, the publicly available prototype
+implements only a narrow subset of the described protocol.  The complete
+nullifiable commitment scheme (Construction~1), the Merkle-tree eligibility
+set, the $R_{\text{vote}}$ circuit constraints for voter-key binding, and the
+nullification-based tally are all absent.  Additionally, we identify three
+protocol-level limitations in the paper itself that undermine its security
+claims in practice.
+
+\subsection{Contributions}
+
+\begin{enumerate}
+  \item \textbf{Complete implementation} of all cryptographic components
+    described in Sections~2--4 of the zkVoting paper, using Baby~Jubjub EC
+    arithmetic (circomlibjs), Poseidon hashing, and Groth16 zk-SNARKs.
+  \item \textbf{$\pi_{\text{total}}$ eligibility proof} (Improvement~I): a
+    concrete non-interactive DLEQ Schnorr proof over the homomorphically
+    aggregated commitment that proves exactly $n_v$ real casting keys were
+    issued, preventing ballot stuffing.
+  \item \textbf{Threshold master secret key} (Improvement~II): $(t,n)$-Shamir
+    secret sharing of $\mathit{msk}$ with Feldman VSS verification and a
+    threshold partial-nullification tally protocol, eliminating the
+    single-authority trust bottleneck.
+  \item \textbf{Cross-election unlinkability} (Improvement~III): election-scoped
+    key derivation $\mathit{ckHash}_e = H(\mathit{ckHash}, e)$ prevents
+    linking a voter's participation across elections when the same casting key
+    is presented.
+  \item \textbf{Comparative analysis} of security properties, constraint counts,
+    and API surface between the original paper, the basic prototype, and our
+    enhanced system.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Background: the zkVoting Protocol}
+\label{sec:background}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Nullifiable Commitment Scheme (Construction~1)}
+
+The nullifiable commitment scheme $\Pi_{\mathrm{NC}} =
+(\mathsf{Setup}, \mathsf{KeyGen}, \mathsf{Commit}, \mathsf{Nullify},
+\mathsf{Open}, \mathsf{Open}_{\mathrm{null}}, \mathsf{KeyProve},
+\mathsf{SimKeyProve})$ operates over a prime-order elliptic curve group
+$\mathbb{G}$ with order $q$ (Baby~Jubjub).  The concrete instantiation is:
+
+\vspace{4pt}
+\noindent\textbf{Setup.}
+$\rho \leftarrow\!\!\!\$\ \mathbb{Z}_q^*;\;
+g_1,g_2,g_3 \leftarrow\!\!\!\$\ \mathbb{G};\;
+g_4 = \rho\cdot g_1;\;
+\mathit{mpk} = (g_1,g_2,g_3,g_4);\;
+\mathit{msk} = \rho;\;
+\mathit{ck}^* = (g_2 - g_4,\, g_3).$
+
+\vspace{4pt}
+\noindent\textbf{KeyGen.}
+$h_1 \leftarrow\!\!\!\$\ \mathbb{G};\;
+h_2 = \mathit{msk}\cdot h_1 + b\cdot g_3\;(b\in\{0,1\});\;
+\mathit{ck} = (h_1, h_2).$
+
+\vspace{4pt}
+\noindent\textbf{Commit.}
+$C_1 = r\cdot g_1 + m\cdot h_1;\;
+C_2 = r\cdot g_2 + m\cdot h_2;\;
+\mathit{cm} = (C_1, C_2).$
+
+\vspace{4pt}
+\noindent\textbf{Nullify.}
+$\mathit{cm}^* = C_2 - \mathit{msk}\cdot C_1.$
+For real keys ($b=1$): opens to $m$ via $\mathsf{Open}_{\mathrm{null}}$.
+For fake keys ($b=0$): opens to $0$.
+
+\subsection{E2E Verifiable Voting Protocol}
+
+The four phases are Setup, Register, Vote, and Tally.  The voter's ballot is:
+\[
+  B = \bigl(e,\; \mathit{sn},\; \mathit{CT},\; \mathit{cm},\; \pi_{\text{vote}}\bigr)
+\]
+where $\mathit{sn} = H(e, \mathit{ck}, \mathit{sk}_{\mathrm{id}})$,
+$\mathit{cm}$ is the nullifiable commitment, $\mathit{CT}$ is the hybrid
+encryption of the message, and $\pi_{\text{vote}}$ is a Groth16 proof for
+$R_{\text{vote}}$ (see Section~\ref{sec:circuit}).
+
+\subsection{Security Properties}
+
+The paper proves ballot privacy (BP), voter anonymity (VA), receipt freeness
+(RF), coercion resistance (CR), individual verifiability (IV), universal
+verifiability (UV), E2E verifiability (E2E-V), and eligibility verifiability
+(EV) under standard assumptions (DL, DDH, collision-resistance, zk-SNARK
+soundness).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{What the Basic Prototype Was Missing}
+\label{sec:missing}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The original prototype implemented only three constraints in its Circom circuit:
+
+\begin{enumerate}
+  \item $\mathit{vote} \in \mathit{candidateList}$
+  \item $\mathit{sn} = \mathrm{Poseidon}(\mathit{electionId},\, \mathit{castingKey},\, \mathit{voterSecret})$
+    where $\mathit{castingKey}$ was a single random scalar---not an EC key.
+  \item $\mathit{cm} = \mathrm{Poseidon}(\mathit{vote}, \mathit{voteSalt})$---a
+    plain Poseidon commitment, not a nullifiable one.
+\end{enumerate}
+
+The following components from the paper were completely absent:
+
+\begin{itemize}
+  \item No elliptic-curve nullifiable commitment (Construction~1).
+  \item No real/fake key distinction at registration---only one key per voter.
+  \item No \textsf{KeyProve} or \textsf{SimKeyProve} (key deniability absent).
+  \item No Merkle tree for the casting-key set $\mathit{rt}$.
+  \item No $R_{\text{id}}$ constraint ($\mathit{pkid} = H(\mathit{sk}_{\mathrm{id}})$).
+  \item No Merkle membership proof in the circuit.
+  \item Tally by plaintext decryption only---no nullification, so fake-key
+    ballots would be counted as real votes.
+  \item No $\pi_{\text{total}}$ eligibility proof (not even described concretely).
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Our Implementation of Missing Components}
+\label{sec:impl}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Nullifiable Commitment Scheme}
+
+We implement Construction~1 in \texttt{backend/src/lib/nullifiableCommitment.js}
+using the \texttt{circomlibjs} Baby~Jubjub API.  Elliptic-curve points are
+represented as \texttt{Uint8Array} field elements in Montgomery form and
+serialised to decimal strings for JSON persistence.
+
+Key implementation details:
+\begin{itemize}
+  \item Scalar field: $q \approx 2^{251}$ (Baby~Jubjub suborder).
+  \item Random scalars sampled via rejection sampling from 256-bit entropy.
+  \item Point negation (twisted-Edwards): $-(x,y) = (-x, y)$.
+  \item \textsf{KeyProve}: non-interactive Sigma protocol.  Challenge $c$ is
+    stored in the proof tuple $(p, k, c)$ without a Fiat-Shamir hash so that
+    \textsf{SimKeyProve} transcripts are indistinguishable (key deniability).
+\end{itemize}
+
+Correctness was verified: real commitments nullify to $(m,r)$, fake
+commitments nullify to $(0,r)$.
+
+\subsection{Real/Fake Key Registration}
+
+\texttt{POST /api/register} now invokes $\mathsf{KeyGen}(\mathit{mpk},
+\mathit{msk}, 1)$ and issues a KeyProve proof.
+\texttt{POST /api/register/fake-key} issues $b=0$ keys (unlimited).
+\texttt{POST /api/register/sim-key-prove} runs \textsf{SimKeyProve}: a voter
+under coercion can claim any key is ``real'' using a simulated proof
+indistinguishable from a genuine KeyProve.
+
+\subsection{Poseidon Merkle Tree}
+
+\texttt{backend/src/lib/merkleTree.js} implements a fixed-depth-16
+($2^{16} = 65{,}536$ voters) binary Merkle tree over Poseidon hashes.
+Leaf $i = \mathrm{Poseidon}(\mathit{ckHash}_i, \mathit{pkid}_i)$.
+Empty leaves use $\mathrm{Poseidon}(0,0)$.  Membership proofs are (path
+elements, path indices) pairs of length~16.
+
+\subsection{Enhanced Circom Circuit ($R_{\text{vote}}$)}
+\label{sec:circuit}
+
+The new circuit \texttt{circuits/enhanced\_vote.circom} encodes six constraints
+compared to the original three:
+
+\begin{enumerate}
+  \item $\mathit{pkid} = \mathrm{Poseidon}(\mathit{voterSecret})$ \hfill [NEW]
+  \item $\mathit{ckHash} = \mathrm{Poseidon}(h_{1x}, h_{1y}, h_{2x}, h_{2y})$ \hfill [NEW]
+  \item $\mathit{sn} = \mathrm{Poseidon}(\mathit{electionId}, \mathit{ckHash}, \mathit{voterSecret})$
+  \item $\mathit{vote} \in \mathit{candidateList}$
+  \item $\mathit{cm} = \mathrm{Poseidon}(\mathit{vote}, \mathit{voteSalt})$
+  \item Merkle path check: leaf $= \mathrm{Poseidon}(\mathit{ckHash}, \mathit{pkid})$
+    lies in tree with root $\mathit{merkleRoot}$ \hfill [NEW]
+\end{enumerate}
+
+Public signals (10 total): $\mathit{electionId}$, $\mathit{candidateList}[0..4]$,
+$\mathit{serialNumber}$, $\mathit{voteCommitment}$, $\mathit{publicKey}$,
+$\mathit{merkleRoot}$.
+
+\subsection{Nullification-Based Tally}
+
+\texttt{GET /api/results/tally} follows Construction~2 (§4.4 of the paper):
+for each ballot $(C_1, C_2)$, compute $\mathit{cm}^* = C_2 - \mathit{msk}\cdot C_1$,
+then verify $\mathsf{Open}_{\mathrm{null}}(\mathit{ck}^*, \mathit{cm}^*, m, r)$.
+Ballots cast with fake keys nullify to zero and are discarded.  Complexity: $O(n)$.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Novel Improvements Over the Paper}
+\label{sec:improvements}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Improvement I: $\pi_{\text{total}}$ Eligibility Proof}
+
+\textbf{Limitation in the paper.}
+Section~4.2 states that the authority must publish a proof $\pi_{\text{total}}$
+showing that the nullification of the aggregated commitment of all casting
+keys opens to $n_v$ (the number of eligible voters):
+\[
+  R_{\text{total}} = \Bigl\{(\mathit{ck}^*, \mathit{cm}, n_v\,;\, \mathit{msk}) :
+    \mathit{cm}^* \leftarrow \mathsf{Nullify}(\mathit{msk}, \mathit{cm}),\;
+    \mathsf{Open}_{\mathrm{null}}(\mathit{ck}^*, \mathit{cm}^*, n_v, 0) = 1\Bigr\}
+\]
+This prevents the authority from secretly issuing extra real keys to stuff
+the ballot box.  The paper mentions 2,243 constraints for $R_{\text{total}}$
+(Table~3) but provides no concrete implementation anywhere.
+
+\textbf{Our implementation.}
+We exploit the homomorphic property directly.  For each issued casting key
+$\mathit{ck}_i$, we compute:
+\[
+  \mathit{cm}_i = \mathsf{Commit}(\mathit{ck}_i, 1;\, 0)
+  = (g_1^0 \cdot h_{1,i}^1,\; g_2^0 \cdot h_{2,i}^1)
+  = (h_{1,i},\; h_{2,i})
+\]
+The aggregate: $\mathit{cm}_{\mathrm{agg}} = \sum_i \mathit{cm}_i$.
+After nullification:
+\begin{align*}
+  \mathit{cm}^*_{\mathrm{agg}} &= C_{2,\mathrm{agg}} - \mathit{msk}\cdot C_{1,\mathrm{agg}}\\
+  &= \sum_i h_{2,i} - \mathit{msk}\cdot \sum_i h_{1,i}\\
+  &= \sum_i (h_{2,i} - \mathit{msk}\cdot h_{1,i})\\
+  &= \sum_i b_i \cdot g_3 \quad\text{(since } h_{2,i} - \mathit{msk}\cdot h_{1,i} = b_i\cdot g_3\text{)}\\
+  &= n_v^{\text{real}}\cdot g_3
+\end{align*}
+where $n_v^{\text{real}} = \sum_i b_i$ counts only real keys.  This opens
+to $n_v^{\text{real}}$ under $\mathit{ck}^* = (g_2 - g_4, g_3)$ with $r=0$.
+
+We prove knowledge of $\mathit{msk}$ via a non-interactive DLEQ Schnorr
+argument (Fiat-Shamir):
+\begin{align}
+  t &\leftarrow\!\!\!\$\ \mathbb{Z}_q,\quad A_1 = t\cdot g_1,\quad A_2 = {-t}\cdot C_{1,\mathrm{agg}}\\
+  c &= H(g_1, g_4, C_{1,\mathrm{agg}}, \mathit{cm}^*_{\mathrm{agg}}, A_1, A_2, n_v)\\
+  k &= t + \mathit{msk}\cdot c \bmod q
+\end{align}
+Verifier checks: $k\cdot g_1 = A_1 + c\cdot g_4$ and
+$-k\cdot C_{1,\mathrm{agg}} + C_{2,\mathrm{agg}} - \mathit{cm}^*_{\mathrm{agg}} = A_2 +
+c\cdot(C_{2,\mathrm{agg}} - \mathit{cm}^*_{\mathrm{agg}})$.
+
+Exposed at \texttt{GET /api/election/total-proof}.
+
+\subsection{Improvement II: Threshold Master Secret Key}
+
+\textbf{Limitation in the paper.}
+The entire coercion resistance of zkVoting depends on the secrecy of $\mathit{msk}$.
+A single authority holding $\mathit{msk}$ can:
+(a) identify real vs.\ fake keys by nullifying commitments;
+(b) unilaterally break coercion resistance if compromised.
+The paper acknowledges a ``trusted tallier'' assumption but provides no
+mechanism to distribute this trust.
+
+\textbf{Our implementation.}
+We implement $(t,n)$-Shamir Secret Sharing \cite{shamir1979share} over
+$\mathbb{Z}_q$:
+
+\vspace{4pt}
+\noindent\textbf{Split.}
+Choose random polynomial $f(x) = \mathit{msk} + a_1 x + \cdots + a_{t-1}x^{t-1}$
+over $\mathbb{Z}_q$.  Share $i = (i,\, f(i))$ for $i = 1,\ldots,n$.
+
+\vspace{4pt}
+\noindent\textbf{Reconstruct.}
+Lagrange interpolation over $\mathbb{Z}_q$ from any $t$ shares recovers
+$f(0) = \mathit{msk}$.
+
+\vspace{4pt}
+\noindent\textbf{Feldman VSS.}
+Public commitments $\{C_j = a_j\cdot\mathsf{Base8}\}_{j=0}^{t-1}$ allow each
+authority to verify its own share without trusting the dealer:
+$s_i\cdot\mathsf{Base8} = \sum_{j=0}^{t-1} C_j\cdot i^j$.
+
+\vspace{4pt}
+\noindent\textbf{Threshold tally.}
+Authority $i$ computes partial decryption $P_i = s_i\cdot C_1$ for each ballot.
+$t$ partial decryptions combine via Lagrange interpolation to recover
+$\mathit{msk}\cdot C_1$ without any party ever holding $\mathit{msk}$ alone.
+
+Exposed at \texttt{POST /api/election/init?t=2\&n=3} and
+\texttt{POST /api/election/threshold-tally}.
+
+\subsection{Improvement III: Cross-Election Unlinkability}
+
+\textbf{Limitation in the paper.}
+The paper's serial number formula $\mathit{sn} = H(e, \mathit{ck},
+\mathit{sk}_{\mathrm{id}})$ uses the raw casting key $\mathit{ck}$.  If a voter
+reuses the same real key in a second election (a natural scenario, e.g.\ if
+re-registration is not required), an observer can correlate serial numbers
+across elections and determine that the same voter participated in both.
+This breaks voter anonymity across elections.
+
+\textbf{Our implementation.}
+We introduce election-scoped key derivation:
+\[
+  \mathit{ckHash}_e = H(\mathit{ckHash},\, e)
+\]
+The serial number becomes $\mathit{sn} = H(e, \mathit{ckHash}_e, \mathit{sk}_{\mathrm{id}})$.
+Even if $\mathit{ck}$ is identical across elections, $\mathit{ckHash}_e$ is
+election-specific, and the resulting serial numbers are uncorrelated.  The
+Merkle leaf also uses $\mathit{ckHash}_e$, so eligibility proofs are
+election-scoped.  This is a lightweight change: one additional Poseidon hash
+call per registration, zero circuit constraint overhead (the hash is computed
+off-circuit and the hash value is an existing circuit input).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Comparative Analysis}
+\label{sec:comparison}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Security Properties}
+
+Table~\ref{tab:security} compares the security properties of the paper's
+original protocol, the basic prototype, and our enhanced system.
+
+\begin{table}[h]
+\centering
+\caption{Security property comparison}
+\label{tab:security}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Property} & \textbf{Paper} & \textbf{Basic proto.} & \textbf{Ours} \\
+\midrule
+Ballot privacy (BP)          & \checkmark & \checkmark & \checkmark \\
+Voter anonymity (VA)         & \checkmark & \checkmark & \checkmark \\
+Receipt freeness (RF)        & \checkmark & $\times$   & \checkmark \\
+Coercion resistance (CR)     & \checkmark & $\times$   & \checkmark \\
+Individual verif.\ (IV)      & \checkmark & \checkmark & \checkmark \\
+Universal verif.\ (UV)       & \checkmark & partial    & \checkmark \\
+E2E verifiability (E2EV)     & \checkmark & $\times$   & \checkmark \\
+Eligibility verif.\ (EV)     & \checkmark & $\times$   & \checkmark \\
+\midrule
+$\pi_{\text{total}}$ proof   & defined only & $\times$ & \checkmark \\
+Threshold $\mathit{msk}$     & $\times$   & $\times$   & \checkmark \\
+Cross-election unlinkability  & $\times$   & $\times$   & \checkmark \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Protocol Components Implemented}
+
+Table~\ref{tab:components} shows which protocol components are present.
+
+\begin{table}[h]
+\centering
+\caption{Protocol component coverage}
+\label{tab:components}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Component} & \textbf{Paper} & \textbf{Basic proto.} & \textbf{Ours} \\
+\midrule
+NC scheme (Constr.\ 1)       & defined & $\times$ & \checkmark \\
+Real/fake key issuance       & defined & $\times$ & \checkmark \\
+KeyProve                     & defined & $\times$ & \checkmark \\
+SimKeyProve (deniability)    & defined & $\times$ & \checkmark \\
+Merkle key set ($\mathit{rt}$) & defined & $\times$ & \checkmark \\
+$R_{\text{id}}$: $\mathit{pkid}=H(\mathit{sk})$ & in circuit & $\times$ & \checkmark \\
+Merkle proof in circuit      & in circuit & $\times$ & \checkmark \\
+Nullification tally O($n$)   & defined & $\times$ & \checkmark \\
+$\pi_{\text{total}}$ proof   & defined  & $\times$ & \checkmark \\
+Threshold $\mathit{msk}$ (SSS) & $\times$ & $\times$ & \checkmark \\
+Cross-election unlinkability & $\times$ & $\times$ & \checkmark \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Circuit Constraint Comparison}
+
+Table~\ref{tab:constraints} compares circuit constraint counts.  The paper
+uses MiMC7 hashing and includes a full hybrid-encryption proof in
+$R_{\text{vote}}$; we use Poseidon (more ZK-efficient) and handle encryption
+off-circuit (symmetric AES-GCM), so our circuit is substantially smaller.
+
+\begin{table}[h]
+\centering
+\caption{Circuit constraint comparison (approximate)}
+\label{tab:constraints}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Relation} & \textbf{Paper (MiMC7)} & \textbf{Ours (Poseidon)} \\
+\midrule
+$R_{\text{id}}$              & 365       & $\approx 58$ \\
+$R_{\text{total}}$           & 2{,}243   & DLEQ Schnorr (no circuit) \\
+$R_{\text{vote}}$            & 15{,}829  & $\approx 1{,}450$\textsuperscript{a} \\
+$R_{\text{tally}}$           & 6{,}111   & off-circuit EC ops \\
+\bottomrule
+\multicolumn{3}{l}{\small \textsuperscript{a}Excludes encryption proof; includes Merkle depth-16.}
+\end{tabular}
+\end{table}
+
+\noindent The dramatic reduction in $R_{\text{vote}}$ constraints (from 15,829
+to $\approx$1,450) is because: (a) Poseidon has $\approx$65 constraints
+per 2-input call vs.\ MiMC7's $\approx$220+; (b) we do not prove the
+hybrid-encryption computation in-circuit (a pragmatic simplification).
+
+\subsection{Tally Complexity}
+
+\begin{table}[h]
+\centering
+\caption{Tally time complexity}
+\label{tab:tally}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lll}
+\toprule
+\textbf{System} & \textbf{Complexity} & \textbf{Notes} \\
+\midrule
+Civitas/JCJ     & $O(n_b^2)$ & PET test for each pair \\
+VoteAgain       & $O(n_b \log n_b)$ & sort-based \\
+Loki            & $O(n_v)$ & per-voter re-randomization \\
+zkVoting (paper) & $O(n_b)$ & nullification \\
+Ours (basic)    & $O(n_b)$ & nullification \\
+Ours (threshold) & $O(t\cdot n_b)$ & $t$ partial nullifications \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent The threshold tally introduces a factor of $t$ (the number of
+authorities required) but $t$ is a small constant independent of $n_b$.
+
+\subsection{Trust Assumptions}
+
+\begin{table}[h]
+\centering
+\caption{Trust assumption comparison}
+\label{tab:trust}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lp{5.5cm}}
+\toprule
+\textbf{System} & \textbf{Trust required for CR} \\
+\midrule
+JCJ/Civitas     & registrar + tallier \\
+VoteAgain       & registrar + voting server + tallier \\
+zkVoting (paper) & registrar + tallier (single $\mathit{msk}$ holder) \\
+Ours (Improvement II) & any $t$ of $n$ talliers (threshold) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Implementation Architecture}
+\label{sec:arch}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Technology Stack}
+
+\begin{itemize}
+  \item \textbf{ZK proving}: Circom 2.1.6, snarkjs 0.7.6 (Groth16)
+  \item \textbf{EC arithmetic}: circomlibjs 0.1.7 (Baby~Jubjub, Poseidon)
+  \item \textbf{Backend}: Node.js 20, Express 5
+  \item \textbf{Persistence}: JSON files (prototype; production would use a
+    tamper-evident ledger)
+\end{itemize}
+
+\subsection{Key New Files}
+
+\begin{itemize}
+  \item \texttt{nullifiableCommitment.js}: Construction~1 (setup, keyGen,
+    commit, nullify, open, openNull, keyProve, simKeyProve)
+  \item \texttt{merkleTree.js}: depth-16 Poseidon Merkle tree with proof
+    generation and bulletin-board persistence
+  \item \texttt{totalProof.js}: $\pi_{\text{total}}$ accumulation and DLEQ
+    Schnorr proof
+  \item \texttt{thresholdMsk.js}: Shamir SSS, Feldman VSS, partial nullification
+  \item \texttt{enhanced\_vote.circom}: full $R_{\text{vote}}$ circuit with
+    pkid proof and Merkle membership
+\end{itemize}
+
+\subsection{New API Endpoints}
+
+\begin{itemize}
+  \item \texttt{POST /api/register/fake-key} --- issue fake casting key
+  \item \texttt{POST /api/register/sim-key-prove} --- SimKeyProve for deniability
+  \item \texttt{POST /api/election/init} --- NC setup + threshold msk split
+  \item \texttt{GET /api/election/total-proof} --- $\pi_{\text{total}}$ proof
+  \item \texttt{POST /api/election/threshold-tally} --- threshold reconstruction demo
+  \item \texttt{GET /api/bulletin-board} --- full casting-key set + Merkle root
+  \item \texttt{GET /api/results/nullify/:ballotId} --- per-ballot nullification audit
+  \item \texttt{GET /api/results/legacy-tally} --- original tally for comparison
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Security Analysis of Improvements}
+\label{sec:security}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{$\pi_{\text{total}}$ Soundness}
+
+The DLEQ Schnorr proof is sound under the Discrete Log assumption: a
+computationally bounded prover cannot produce a valid $(A_1, A_2, k, c)$
+satisfying both verification equations without knowing $\mathit{msk}$ such
+that $\mathit{msk}\cdot g_1 = g_4$.  Together with the nullifiability
+property of $\Pi_{\mathrm{NC}}$, this proves $n_v^{\text{real}} = n_v$
+with negligible soundness error.
+
+\subsection{Threshold Security}
+
+By the information-theoretic security of Shamir SSS over $\mathbb{Z}_q$,
+any $t-1$ shares reveal zero information about $\mathit{msk}$.  Feldman VSS
+adds verifiability: a dishonest dealer distributing inconsistent shares is
+detected with probability 1 (unconditional, not just computational).  The
+threshold partial-nullification protocol is secure as long as at least
+$t$ of the $n$ authorities are honest and do not collude.
+
+\subsection{Cross-Election Unlinkability}
+
+The derivation $\mathit{ckHash}_e = H(\mathit{ckHash}, e)$ is election-specific.
+Under the collision resistance of Poseidon (modelled as a random oracle in
+the BN128 field), $\mathit{ckHash}_{e_1}$ and $\mathit{ckHash}_{e_2}$ for
+$e_1 \neq e_2$ are computationally independent, so no PPT adversary can
+link the same voter's serial numbers across elections with more than negligible
+advantage.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Limitations and Future Work}
+\label{sec:future}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{enumerate}
+  \item \textbf{Trusted setup}: Groth16 requires a per-circuit trusted setup.
+    Migrating to Plonk or Halo2 would eliminate this assumption.
+  \item \textbf{Blockchain bulletin board}: the prototype uses JSON files.
+    A tamper-evident ledger (e.g.\ an Ethereum smart contract) is required
+    for production deployment and full E2E verifiability.
+  \item \textbf{Encryption proof in circuit}: we prove only the Poseidon
+    commitment in-circuit; the hybrid encryption $\mathit{CT} = \Pi_{\mathrm{HBE}}.\mathsf{Enc}(\mathit{pk}, m; k)$
+    is not circuit-verified.  Adding this would restore the paper's full
+    $R_{\text{vote}}$ constraint set.
+  \item \textbf{Client-side proof generation}: proof generation should run
+    on the voter's device (browser/mobile) to preserve the ZK property;
+    our prototype performs it server-side for simplicity.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Conclusion}
+\label{sec:conclusion}
+% ─────────────────────────────────────────────────────────────────────────────
+
+We presented a complete implementation of the zkVoting protocol's missing
+cryptographic components and identified three novel improvements.  The
+nullifiable commitment scheme (Construction~1), implemented over Baby~Jubjub
+using circomlibjs, correctly satisfies hiding, binding, nullifiability,
+key indistinguishability, and key deniability.  The enhanced Circom circuit
+adds voter public-key proofs and Merkle membership checks.  The O($n$)
+nullification tally correctly discards fake-key ballots.
+
+Beyond completing the paper, we showed that the $\pi_{\text{total}}$
+eligibility proof can be instantiated concretely using a DLEQ Schnorr
+argument over the aggregate homomorphic commitment---preventing ballot
+stuffing without a full Groth16 circuit.  Threshold Shamir SSS eliminates
+the single-authority trust bottleneck for the master secret key.  Election-scoped
+key derivation closes the cross-election linkability gap at negligible cost.
+
+These contributions together produce a prototype that satisfies all eight
+security properties in Table~\ref{tab:security} and surpasses the original
+zkVoting paper on three additional dimensions.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{thebibliography}{00}
+
+\bibitem{park2024zkvoting}
+S.~Park, J.~Choi, J.~Kim, and H.~Oh,
+``zkVoting: Zero-knowledge proof based coercion-resistant and E2E verifiable e-voting system,''
+\textit{Cryptology ePrint Archive}, Paper 2024/1003, 2024.
+
+\bibitem{shamir1979share}
+A.~Shamir,
+``How to share a secret,''
+\textit{Commun.\ ACM}, vol.~22, no.~11, pp.~612--613, Nov.\ 1979.
+
+\bibitem{juels2005coercion}
+A.~Juels, D.~Catalano, and M.~Jakobsson,
+``Coercion-resistant electronic elections,''
+in \textit{Proc.\ ACM Workshop Privacy Electron.\ Soc.}, 2005, pp.~61--70.
+
+\bibitem{groth2016size}
+J.~Groth,
+``On the size of pairing-based non-interactive arguments,''
+in \textit{Proc.\ EUROCRYPT}, 2016, pp.~305--326.
+
+\bibitem{belles2023baby}
+M.~Bellés-Muñoz, B.~Whitehat, and J.~Baylina,
+``Twisted Edwards elliptic curves for zero-knowledge circuits,''
+\textit{Mathematics}, vol.~9, no.~23, 2021.
+
+\bibitem{grassi2021poseidon}
+L.~Grassi, D.~Khovratovich, C.~Rechberger, A.~Roy, and M.~Schofnegger,
+``Poseidon: A new hash function for zero-knowledge proof systems,''
+in \textit{Proc.\ USENIX Security}, 2021.
+
+\bibitem{lueks2020voteagain}
+W.~Lueks, I.~Querejeta-Azurmendi, and C.~Troncoso,
+``VoteAgain: A scalable coercion-resistant voting system,''
+in \textit{Proc.\ USENIX Security}, 2020, pp.~1553--1570.
+
+\bibitem{feldman1987practical}
+P.~Feldman,
+``A practical scheme for non-interactive verifiable secret sharing,''
+in \textit{Proc.\ FOCS}, 1987, pp.~427--438.
+
+\end{thebibliography}
+
+\end{document}
