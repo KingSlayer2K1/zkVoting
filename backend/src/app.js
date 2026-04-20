@@ -12,7 +12,18 @@ const { getBulletinBoard } = require("./lib/merkleTree");
 
 const app = express();
 
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc:  ["'self'", "'unsafe-inline'"],
+      styleSrc:   ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc:    ["'self'", "https://fonts.gstatic.com"],
+      connectSrc: ["'self'", "http://localhost:4000"],
+      imgSrc:     ["'self'", "data:"],
+    },
+  },
+}));
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 app.use(morgan("dev"));

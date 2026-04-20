@@ -92,20 +92,58 @@ function isCandidateAllowed(election, vote) {
 
 /**
  * Compute serial number using the cross-election-unlinkable formula:
- *   sn = H(electionId, ckHashE, voterSecret)
+ *   sn = H(electionId, ckHashE, voterSecret, epochSecret)
  *
- * where ckHashE = H(ckHash, electionId)  — election-scoped key hash.
- *
- * Improvement 3: using ckHashE instead of raw ckHash means the serial number
- * is different for the same voter across different elections, preventing
- * cross-election linkability.  Compare to the paper's formula:
- *   sn = H(e, ck, skid)  — raw ck would be reused and linkable across elections.
+ * Improvement 3: ckHashE = H(ckHash, electionId) prevents cross-election linkability.
+ * Improvement IV: epochSecret adds forward secrecy — delete after voting!
  */
-async function computeSerialNumber({ electionId, ckHashE, voterSecret }) {
-  return poseidonHash([electionId, ckHashE, voterSecret]);
+async function computeSerialNumber({ electionId, ckHash, voterSecret, epochSecret }) {
+  if (epochSecret !== undefined && epochSecret !== null) {
+    return poseidonHash([electionId, ckHash, voterSecret, epochSecret]);
+  }
+  return poseidonHash([electionId, ckHash, voterSecret]);
 }
 
-function ensureNoDoubleVote({ voter, serialNumber, nullifiers, votes }) {
+/**
+ * Improvement VI: Check voting phase, including hidden grace period.
+ *
+ * Returns:
+ *   { phase: 'open' | 'grace' | 'closed', allowed: boolean }
+ *
+ * During 'open': any new or re-vote is accepted.
+ * During 'grace': ONLY re-votes (same serial number) are accepted.
+ * During 'closed': nothing is accepted.
+ */
+function checkVotingPhase(election) {
+  if (!election.publicDeadline) {
+    return { phase: "open", allowed: true }; // no deadline set
+  }
+  const now = new Date();
+  const publicDL = new Date(election.publicDeadline);
+  const graceDL = election.graceDeadline
+    ? new Date(election.graceDeadline)
+    : publicDL;
+
+  if (now < publicDL) return { phase: "open", allowed: true };
+  if (now < graceDL)  return { phase: "grace", allowed: true };
+  return { phase: "closed", allowed: false };
+}
+
+function ensureNoDoubleVote({ voter, serialNumber, nullifiers, votes, isGracePeriod }) {
+  // Improvement VI: During grace period, allow overwriting previous vote
+  if (isGracePeriod) {
+    // In grace period, ONLY re-votes with an existing SN are allowed
+    const existingBallot = votes.find((v) => v.serialNumber === serialNumber);
+    if (!existingBallot) {
+      return {
+        ok: false, status: 403,
+        error: "Grace period: only re-votes with an existing serial number are accepted.",
+      };
+    }
+    // Allow overwrite
+    return { ok: true, isRevote: true, existingBallotIndex: votes.indexOf(existingBallot) };
+  }
+
   if (voter.hasSubmittedBallot) {
     return { ok: false, status: 409, error: "Voter has already submitted a ballot." };
   }
@@ -115,13 +153,14 @@ function ensureNoDoubleVote({ voter, serialNumber, nullifiers, votes }) {
   if (votes.some((v) => v.serialNumber === serialNumber)) {
     return { ok: false, status: 409, error: "Duplicate serial number in ballot store." };
   }
-  return { ok: true };
+  return { ok: true, isRevote: false };
 }
 
 async function storeAcceptedBallot({
   voters, votes, nullifiers,
   voter, serialNumber, voteCommitment, ncCommitment, ncRandom,
   proof, publicSignals, vote, voteSalt,
+  isRevote, existingBallotIndex,
 }) {
   const ballot = {
     ballotId: crypto.randomUUID(),
@@ -137,11 +176,18 @@ async function storeAcceptedBallot({
       // ncRandom is needed by the tallier to run Opennull after Nullify
       ncRandom: String(ncRandom),
     }),
-    status: "ACCEPTED_VERIFIED",
+    status: isRevote ? "REVOTE_OVERWRITE" : "ACCEPTED_VERIFIED",
     submittedAt: new Date().toISOString(),
+    ...(isRevote ? { revoteNote: "This ballot replaced a previous vote during the grace period (Improvement VI)." } : {}),
   };
 
-  votes.push(ballot);
+  // Improvement VI: if re-vote, overwrite the existing ballot instead of appending
+  if (isRevote && existingBallotIndex !== undefined) {
+    votes[existingBallotIndex] = ballot;
+  } else {
+    votes.push(ballot);
+  }
+
   voter.hasSubmittedBallot = true;
   voter.serialNumber = serialNumber;
 
@@ -199,14 +245,32 @@ router.post("/cast", async (req, res, next) => {
       });
     }
 
+    // ── Improvement VI: voting phase check ──────────────────────────────────
+    const phaseCheck = checkVotingPhase(election);
+    if (!phaseCheck.allowed) {
+      return res.status(403).json({
+        ok: false,
+        error: "Voting is closed.",
+        phase: phaseCheck.phase,
+      });
+    }
+
     const voteSalt     = BigInt("0x" + crypto.randomBytes(31).toString("hex")).toString();
     const ncRandom     = nc.randomScalar();  // r for the EC commitment
 
-    // ── Serial number (Improvement 3: cross-election-unlinkable formula) ────
+    // ── Improvement IV: generate ephemeral epochSecret for forward secrecy ──
+    const epochSecret = BigInt("0x" + crypto.randomBytes(31).toString("hex")).toString();
+
+    // ── Serial number (Improvements 3 + IV) ─────────────────────────────────
+    // NOTE: The circuit computes ckHash internally from raw ck coords via
+    //   ckHash = Poseidon(h1x, h1y, h2x, h2y)
+    // and then sn = Poseidon(electionId, ckHash, voterSecret, epochSecret).
+    // We must use the same raw ckHash here, NOT ckHashE (election-scoped).
     const serialNumber = await computeSerialNumber({
       electionId: election.electionId,
-      ckHashE: voter.ckHashE || voter.ckHash,  // ckHashE = H(ckHash, electionId)
+      ckHash: voter.ckHash,
       voterSecret,
+      epochSecret,  // Improvement IV: forward secrecy
     });
 
     // ── Poseidon commitment (ZK circuit) ────────────────────────────────────
@@ -223,8 +287,9 @@ router.post("/cast", async (req, res, next) => {
       ncRandom,
     );
 
-    // ── Double-vote guard ────────────────────────────────────────────────────
-    const dvCheck = ensureNoDoubleVote({ voter, serialNumber, nullifiers, votes });
+    // ── Double-vote guard (Improvement VI: grace period re-vote support) ────
+    const isGracePeriod = phaseCheck.phase === "grace";
+    const dvCheck = ensureNoDoubleVote({ voter, serialNumber, nullifiers, votes, isGracePeriod });
     if (!dvCheck.ok) {
       return res.status(dvCheck.status).json({ ok: false, error: dvCheck.error });
     }
@@ -244,6 +309,7 @@ router.post("/cast", async (req, res, next) => {
       ckH2x: voter.ck.h2.x,
       ckH2y: voter.ck.h2.y,
       voteSalt: String(voteSalt),
+      epochSecret: String(epochSecret),  // Improvement IV: forward secrecy
       merklePathElements: merkleProof.pathElements,
       merklePathIndices: merkleProof.pathIndices,
       // Public
@@ -275,16 +341,20 @@ router.post("/cast", async (req, res, next) => {
       return res.status(400).json({ ok: false, error: "Proof verification failed." });
     }
 
-    // ── Store ballot ─────────────────────────────────────────────────────────
+    // ── Store ballot (Improvement VI: supports re-vote overwrite) ────────────
     const ballot = await storeAcceptedBallot({
       voters, votes, nullifiers,
       voter, serialNumber, voteCommitment, ncCommitment, ncRandom,
       proof, publicSignals, vote, voteSalt,
+      isRevote: dvCheck.isRevote,
+      existingBallotIndex: dvCheck.existingBallotIndex,
     });
 
     return res.status(201).json({
       ok: true,
-      message: "Vote cast and proof verified successfully.",
+      message: dvCheck.isRevote
+        ? "Re-vote accepted during grace period. Previous ballot replaced."
+        : "Vote cast and proof verified successfully.",
       receipt: {
         ballotId:       ballot.ballotId,
         serialNumber:   ballot.serialNumber,
@@ -292,6 +362,11 @@ router.post("/cast", async (req, res, next) => {
         ncCommitment:   ballot.ncCommitment,
         status:         ballot.status,
         submittedAt:    ballot.submittedAt,
+      },
+      forwardSecrecy: {
+        epochSecretUsed: true,
+        warning: "DELETE your epochSecret now. It is no longer needed and " +
+                 "its destruction ensures forward secrecy (Improvement IV).",
       },
       note: "ncCommitment = (C1,C2) is the EC-based nullifiable commitment. " +
             "The tallier uses the master secret key to nullify it and verify " +

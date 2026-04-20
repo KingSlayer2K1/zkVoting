@@ -41,6 +41,11 @@ router.get("/", async (_req, res, next) => {
         candidateIds: election.candidates.map((c) => c.id),
         ncSetupDone:  !!election.ncSetup,
         thresholdConfig: election.thresholdConfig || null,
+        // Improvement VI: only expose publicDeadline, NOT graceDeadline
+        publicDeadline: election.publicDeadline || null,
+        votingOpen: election.publicDeadline
+          ? new Date() < new Date(election.publicDeadline)
+          : true,
       },
     });
   } catch (err) {
@@ -106,6 +111,17 @@ router.post("/init", async (req, res, next) => {
     election.cmAgg = null;      // will be updated as keys are registered
     election.nvReal = 0;        // count of real keys issued
 
+    // Improvement VI: Grace period for coercion-resistant re-voting
+    const graceMinutes = Math.max(0, parseInt(req.body.graceMinutes) || 60);
+    const votingDurationMinutes = Math.max(60, parseInt(req.body.votingDurationMinutes) || 1440); // default 24h
+    const now = new Date();
+    const publicDeadline = new Date(now.getTime() + votingDurationMinutes * 60000);
+    const graceDeadline = new Date(publicDeadline.getTime() + graceMinutes * 60000);
+
+    election.publicDeadline = publicDeadline.toISOString();
+    election.graceDeadline = graceDeadline.toISOString(); // SECRET — not exposed via GET /api/election
+    election.graceMinutes = graceMinutes;
+
     await writeJson("election.json", election);
 
     return res.status(201).json({
@@ -119,6 +135,9 @@ router.post("/init", async (req, res, next) => {
         "Improvement 1 (πtotal): cmAgg accumulator initialised.",
         `Improvement 2 (Threshold msk): msk split into ${n} shares; any ${t} suffice for tally.`,
         "Improvement 3 (Cross-election unlinkability): active by default — casting keys are election-scoped.",
+        "Improvement IV (Forward secrecy): epochSecret support active in circuit.",
+        "Improvement V (Censorship resistance): commit-reveal registration available.",
+        `Improvement VI (Grace period): ${graceMinutes}min hidden grace window after public deadline.`,
       ],
     });
   } catch (err) {

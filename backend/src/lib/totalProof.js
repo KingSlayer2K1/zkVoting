@@ -245,19 +245,19 @@ async function verifyTotalProof(mpk, cmAgg, cmStar, nvReal, ckStar, proof) {
   const rhs3 = await addPoints(A1, cg4);
   if (!F.eq(lhs3[0], rhs3[0]) || !F.eq(lhs3[1], rhs3[1])) return false;
 
-  // Check 4: -k·C1_agg == A2 + c·(cm* − cm*)  →  A2 == -k·C1_agg
-  // More precisely:  k·(-C1_agg) == A2 + c·(something)
-  // We verify:  C2_agg − k·C1_agg == cm* + c·(cm* - cm*)  =>
-  // Actually:   cm*_recomputed = C2_agg + (-k·C1_agg)  should equal cm* + c·0
-  // The Schnorr on the nullification:
-  //   t·(-C1_agg) == A2 + c·(C2_agg - (msk+c·msk)·C1_agg - cm*·0)
-  // Let's verify the simpler form: k·(-C1_agg) == A2 + c·(C2_agg - cm*)
-  const negC1agg  = [F.neg(C1agg[0]), C1agg[1]];
-  const lhs4      = await bj.mulPointEscalar(negC1agg, k);                 // -k·C1_agg
+  // Check 4: Schnorr on the nullification relation.
+  //   A2 = t·(-C1_agg),  k = t + msk·c
+  //   Verify: k·C1_agg == -A2 + c·(C2_agg - cm*)
+  //   because:  k·C1 = (t + msk·c)·C1 = t·C1 + msk·c·C1
+  //            -A2 = t·C1
+  //            c·(C2-cm*) = c·msk·C1
+  //   So RHS = t·C1 + c·msk·C1 = LHS  ✓
+  const lhs4      = await bj.mulPointEscalar(C1agg, k);                     // k·C1_agg
+  const negA2     = [F.neg(A2[0]), A2[1]];                                  // -A2
   const negCmStar = [F.neg(cmStarPt[0]), cmStarPt[1]];
   const C2minusCmStar = await addPoints(C2agg, negCmStar);                  // C2_agg - cm*
   const cTerm4    = await bj.mulPointEscalar(C2minusCmStar, c);             // c·(C2_agg - cm*)
-  const rhs4      = await addPoints(A2, cTerm4);
+  const rhs4      = await addPoints(negA2, cTerm4);                         // -A2 + c·(C2-cm*)
   if (!F.eq(lhs4[0], rhs4[0]) || !F.eq(lhs4[1], rhs4[1])) return false;
 
   return true;

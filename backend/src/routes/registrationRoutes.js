@@ -43,9 +43,10 @@ const express = require("express");
 const { readJson, writeJson } = require("../lib/jsonStore");
 const { randomFieldElement } = require("../lib/cryptoUtils");
 const nc = require("../lib/nullifiableCommitment");
-const { appendEntry } = require("../lib/merkleTree");
+const { appendEntry, getBulletinBoard } = require("../lib/merkleTree");
 const { computeKeyContribution, aggregateCommitments } = require("../lib/totalProof");
 const { buildPoseidon } = require("circomlibjs");
+const regAudit = require("../lib/registrationAudit"); // Improvement V
 
 const router = express.Router();
 
@@ -396,6 +397,75 @@ router.get("/merkle-proof/:voterId", async (req, res, next) => {
       ckHash: voter.ckHash,
       pkid: voter.pkid,
       bbIndex: voter.bbIndex,
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ── POST /api/register/commit ─────────────────────────────────────────────
+//
+// Improvement V: Censorship-resistant registration commit.
+// The voter publishes H(ckHash, pkid, nonce) BEFORE revealing their
+// registration data.  This creates an irrefutable public record of their
+// intent to register.  If the authority later excludes them from the
+// Merkle tree, the censorship is detectable via /api/register/audit.
+
+router.post("/commit", async (req, res, next) => {
+  try {
+    const { ckHash, pkid, nonce } = req.body;
+    if (!ckHash || !pkid || nonce === undefined || nonce === null) {
+      return res.status(400).json({
+        ok: false,
+        error: "ckHash, pkid, and nonce are required.",
+      });
+    }
+
+    const regCommit = await regAudit.computeRegCommit(ckHash, pkid, nonce);
+    const result = await regAudit.storeCommit(regCommit);
+
+    // Prototype: if the voter with this ckHash is already registered in the
+    // Merkle tree (i.e. commit was made AFTER registration), auto-match the
+    // commit so the audit doesn't report a false-positive censorship.
+    const voters = await readJson("voters.json", []);
+    const alreadyRegistered = voters.find((v) => v.ckHash === ckHash && v.pkid === pkid);
+    if (alreadyRegistered) {
+      await regAudit.verifyReveal(ckHash, pkid, nonce);
+    }
+
+    return res.status(201).json({
+      ok: true,
+      message: "Registration commitment recorded on the public log." +
+        (alreadyRegistered ? " (auto-matched: voter already registered)" : ""),
+      regCommit,
+      commitIndex: result.index,
+      timestamp: result.timestamp,
+      autoMatched: !!alreadyRegistered,
+      instruction:
+        alreadyRegistered
+          ? "Commit auto-matched to existing registration. Audit will report clean."
+          : "Now proceed with POST /api/register to reveal your registration. " +
+            "Anyone can later verify your commitment was honored via GET /api/register/audit.",
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ── GET /api/register/audit ───────────────────────────────────────────────
+//
+// Improvement V: Public censorship audit.
+// Compares the registration commit log against the Merkle tree entries.
+// Unmatched commits = voters who committed but were NOT registered = CENSORSHIP.
+
+router.get("/audit", async (req, res, next) => {
+  try {
+    const bb = await getBulletinBoard();
+    const auditResult = await regAudit.auditRegistration(bb.entries);
+
+    return res.json({
+      ok: true,
+      ...auditResult,
     });
   } catch (err) {
     return next(err);

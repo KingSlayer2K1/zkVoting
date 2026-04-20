@@ -64,6 +64,7 @@ template EnhancedVoteValidity(MAX_CANDIDATES, MERKLE_DEPTH) {
     signal input ckH2x;
     signal input ckH2y;
     signal input voteSalt;
+    signal input epochSecret;    // Improvement IV: per-election ephemeral secret
     signal input merklePathElements[MERKLE_DEPTH];
     signal input merklePathIndices[MERKLE_DEPTH];
 
@@ -84,7 +85,8 @@ template EnhancedVoteValidity(MAX_CANDIDATES, MERKLE_DEPTH) {
 
     // ═══════════════════════════════════════════════════════════════════════
     // Constraint ②+③: ckHash = H(h1x, h1y, h2x, h2y)
-    //                 sn     = H(electionId, ckHash, voterSecret)
+    //                 sn     = H(electionId, ckHash, voterSecret, epochSecret)
+    //                 (Improvement IV: epochSecret adds forward secrecy)
     // ═══════════════════════════════════════════════════════════════════════
     component ckHasher = Poseidon(4);
     ckHasher.inputs[0] <== ckH1x;
@@ -92,10 +94,11 @@ template EnhancedVoteValidity(MAX_CANDIDATES, MERKLE_DEPTH) {
     ckHasher.inputs[2] <== ckH2x;
     ckHasher.inputs[3] <== ckH2y;
 
-    component snHasher = Poseidon(3);
+    component snHasher = Poseidon(4);  // was Poseidon(3) — Improvement IV
     snHasher.inputs[0] <== electionId;
     snHasher.inputs[1] <== ckHasher.out;
     snHasher.inputs[2] <== voterSecret;
+    snHasher.inputs[3] <== epochSecret;  // ephemeral — delete after voting
     snHasher.out === serialNumber;
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -125,12 +128,18 @@ template EnhancedVoteValidity(MAX_CANDIDATES, MERKLE_DEPTH) {
 
     // ═══════════════════════════════════════════════════════════════════════
     // Constraint ⑥: Merkle membership proof
-    //   leaf = H(ckHash, pkid)
+    //   Improvement 3: ckHashE = H(ckHash, electionId) for cross-election
+    //   unlinkability.  The bulletin board stores (ckHashE, pkid) entries.
+    //   leaf = H(ckHashE, pkid)
     //   Walk the path and verify that the computed root equals merkleRoot.
     // ═══════════════════════════════════════════════════════════════════════
+    component ckHashEHasher = Poseidon(2);
+    ckHashEHasher.inputs[0] <== ckHasher.out;  // ckHash
+    ckHashEHasher.inputs[1] <== electionId;
+
     component leafHasher = Poseidon(2);
-    leafHasher.inputs[0] <== ckHasher.out;   // ckHash
-    leafHasher.inputs[1] <== publicKey;       // pkid
+    leafHasher.inputs[0] <== ckHashEHasher.out;  // ckHashE
+    leafHasher.inputs[1] <== publicKey;           // pkid
 
     // Walk the Merkle path.  At each level, use a Switcher to place the
     // current hash on the left or right depending on pathIndices[i].
@@ -158,6 +167,8 @@ template EnhancedVoteValidity(MAX_CANDIDATES, MERKLE_DEPTH) {
 
 /*
   Instantiation: 5 candidates, Merkle depth 16 (up to 65 536 voters).
+
+  Private inputs include epochSecret (Improvement IV: forward secrecy).
 
   Public signal order (matches zkService.computePublicSignals):
     [0]            electionId

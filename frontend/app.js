@@ -1,286 +1,490 @@
-const API_BASE = "http://localhost:4000";
-const STORAGE_KEY = "zkvoting_voter_state_v1";
+/* ═══════════════════════════════════════════════════════════════════════════
+   zkVoting — Protocol Dashboard (Research PoC)
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-const state = {
-  election: null,
-  voter: null,
-  receipt: null,
+const API = "http://localhost:4000";
+const STORE_KEY = "zkvoting_state_v3";
+
+const state = { election: null, voter: null, receipt: null };
+
+// ── DOM ──────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+
+const el = {
+  backendDot:    () => $("backendIndicator").querySelector(".dot"),
+  backendLabel:  $("backendLabel"),
+  electionDot:   () => $("electionIndicator").querySelector(".dot"),
+  electionLabel: $("electionLabel"),
+  stateElection: $("stateElectionId"),
+  stateMerkle:   $("stateMerkleRoot"),
+  stateVoters:   $("stateVoterCount"),
+  stateBallots:  $("stateBallotCount"),
+  stateThreshold:$("stateThreshold"),
+  stateGrace:    $("stateGrace"),
+  registerForm:  $("registerForm"),
+  registerBtn:   $("registerBtn"),
+  identityTag:   $("identityTag"),
+  registerOut:   $("registerOutput"),
+  commitForm:    $("commitForm"),
+  commitCkHash:  $("commitCkHash"),
+  commitPkid:    $("commitPkid"),
+  commitOut:     $("commitOutput"),
+  candidateList: $("candidateList"),
+  castBtn:       $("castBtn"),
+  verifyBtn:     $("verifyBtn"),
+  voteOut:       $("voteOutput"),
+  auditBtn:      $("auditBtn"),
+  totalProofBtn: $("totalProofBtn"),
+  auditOut:      $("auditOutput"),
+  tallyBtn:      $("tallyBtn"),
+  legacyTallyBtn:$("legacyTallyBtn"),
+  tallyOut:      $("tallyOutput"),
+  logContainer:  $("logContainer"),
+  clearLogBtn:   $("clearLogBtn"),
 };
 
-const elements = {
-  backendStatus: document.getElementById("backendStatus"),
-  electionName: document.getElementById("electionName"),
-  electionMeta: document.getElementById("electionMeta"),
-  candidateOptions: document.getElementById("candidateOptions"),
-  registerForm: document.getElementById("registerForm"),
-  identityTag: document.getElementById("identityTag"),
-  registerMessage: document.getElementById("registerMessage"),
-  credentialBox: document.getElementById("credentialBox"),
-  credentialText: document.getElementById("credentialText"),
-  voteForm: document.getElementById("voteForm"),
-  castButton: document.getElementById("castButton"),
-  voteMessage: document.getElementById("voteMessage"),
-  receiptBox: document.getElementById("receiptBox"),
-  receiptText: document.getElementById("receiptText"),
-  verifyReceiptButton: document.getElementById("verifyReceiptButton"),
-  receiptVerifyMessage: document.getElementById("receiptVerifyMessage"),
-  statsText: document.getElementById("statsText"),
-  refreshStatsButton: document.getElementById("refreshStatsButton"),
-  loadTallyButton: document.getElementById("loadTallyButton"),
-  tallyContainer: document.getElementById("tallyContainer"),
-};
+// ── Logger ───────────────────────────────────────────────────────────────────
+function log(msg, type = "system") {
+  const now = new Date();
+  const ts = now.toLocaleTimeString("en-GB", { hour12: false });
+  const entry = document.createElement("div");
+  entry.className = `log-entry log-${type}`;
+  entry.innerHTML = `<span class="log-time">${ts}</span><span class="log-msg">${msg}</span>`;
+  el.logContainer.appendChild(entry);
+  el.logContainer.scrollTop = el.logContainer.scrollHeight;
+}
 
-async function apiRequest(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, options);
+// ── API ──────────────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const method = opts.method || "GET";
+  log(`${method} ${path}`, "request");
+  const t0 = performance.now();
+
+  const res = await fetch(`${API}${path}`, opts);
   let body = {};
-  try {
-    body = await response.json();
-  } catch {
-    // Keep body as {} if server returns non-JSON.
+  try { body = await res.json(); } catch {}
+
+  const dt = (performance.now() - t0).toFixed(0);
+
+  if (!res.ok || body.ok === false) {
+    log(`✗ ${res.status} — ${body.error || "unknown error"} [${dt}ms]`, "error");
+    throw new Error(body.error || `${res.status}`);
   }
 
-  if (!response.ok || body.ok === false) {
-    const message = body.error || `Request failed: ${response.status}`;
-    throw new Error(message);
-  }
-
+  log(`✓ ${res.status} [${dt}ms]`, "success");
   return body;
 }
 
-function setStatusBadge(text, variant) {
-  elements.backendStatus.textContent = text;
-  elements.backendStatus.classList.remove("neutral", "ok", "bad");
-  elements.backendStatus.classList.add(variant);
-}
-
-function renderElection() {
-  if (!state.election) {
-    elements.electionName.textContent = "Election unavailable";
-    elements.electionMeta.textContent = "";
-    elements.candidateOptions.innerHTML = "";
-    return;
+// ── Output Box Helpers ───────────────────────────────────────────────────────
+function showOutput(box, data) {
+  box.classList.remove("hidden");
+  if (typeof data === "string") {
+    box.innerHTML = data;
+  } else {
+    box.textContent = JSON.stringify(data, null, 2);
   }
-
-  elements.electionName.textContent = `${state.election.name} (#${state.election.electionId})`;
-  elements.electionMeta.textContent = `${state.election.candidates.length} candidates available`;
-
-  const options = state.election.candidates
-    .map(
-      (candidate, index) => `
-        <label class="optionRow">
-          <input
-            type="radio"
-            name="candidate"
-            value="${candidate.id}"
-            ${index === 0 ? "checked" : ""}
-          />
-          <span>${candidate.name} (ID ${candidate.id})</span>
-        </label>
-      `,
-    )
-    .join("");
-
-  elements.candidateOptions.innerHTML = options;
 }
 
-function saveVoterState() {
-  if (!state.voter) {
-    localStorage.removeItem(STORAGE_KEY);
-    return;
-  }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.voter));
+function formatCrypto(label, value) {
+  const short = typeof value === "string" && value.length > 32
+    ? value.substring(0, 16) + "…" + value.substring(value.length - 8)
+    : value;
+  return `<span class="label">${label}:</span> <span class="val">${short}</span>`;
 }
 
-function loadVoterState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return;
+function btnLoad(btn, on) {
+  if (on) { btn.classList.add("loading"); btn.disabled = true; }
+  else    { btn.classList.remove("loading"); btn.disabled = false; }
+}
 
+// ── State Persistence ────────────────────────────────────────────────────────
+function save() {
+  if (!state.voter) { localStorage.removeItem(STORE_KEY); return; }
+  localStorage.setItem(STORE_KEY, JSON.stringify(state.voter));
+}
+
+function restore() {
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.voterId && parsed.privateCredentials) {
-      state.voter = parsed;
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p?.voterId) state.voter = p;
     }
-  } catch {
-    localStorage.removeItem(STORAGE_KEY);
-  }
+  } catch { localStorage.removeItem(STORE_KEY); }
 }
 
+// ── Protocol State Update ────────────────────────────────────────────────────
+async function refreshProtocolState() {
+  try {
+    const eData = await api("/api/election");
+    state.election = eData.election;
+    el.stateElection.textContent = eData.election?.electionId || "—";
+    el.stateThreshold.textContent = eData.election?.threshold
+      ? `(${eData.election.threshold.t}, ${eData.election.threshold.n})`
+      : "—";
+
+    const elDot = el.electionDot();
+    elDot.className = "dot dot-on";
+    el.electionLabel.textContent = `election #${eData.election.electionId}`;
+
+    // Grace period
+    el.stateGrace.textContent = eData.election?.graceMinutes
+      ? `${eData.election.graceMinutes} min (hidden)`
+      : "not configured";
+  } catch {
+    el.stateElection.textContent = "—";
+    const elDot = el.electionDot();
+    elDot.className = "dot dot-off";
+    el.electionLabel.textContent = "no election";
+  }
+
+  // Bulletin board
+  try {
+    const bb = await api("/api/bulletin-board");
+    const root = bb.bulletinBoard?.merkleRoot || "—";
+    el.stateMerkle.textContent = root;
+    el.stateMerkle.title = root;
+    el.stateVoters.textContent = bb.bulletinBoard?.totalEntries || 0;
+    log(`Merkle root: ${typeof root === "string" ? root.substring(0, 24) : root}…`, "crypto");
+  } catch {
+    el.stateMerkle.textContent = "—";
+    el.stateVoters.textContent = "0";
+  }
+
+  // Stats
+  try {
+    const st = await api("/api/votes/stats");
+    el.stateBallots.textContent = st.stats?.totalBallots || 0;
+  } catch {
+    el.stateBallots.textContent = "0";
+  }
+
+  // Candidates
+  renderCandidates();
+}
+
+// ── Render Candidates ────────────────────────────────────────────────────────
+function renderCandidates() {
+  if (!state.election?.candidates?.length) {
+    el.candidateList.innerHTML = '<span class="dim">no candidates — init election first</span>';
+    return;
+  }
+  el.candidateList.innerHTML = state.election.candidates.map((c, i) => `
+    <label class="candidate-chip ${i === 0 ? 'selected' : ''}">
+      <input type="radio" name="candidate" value="${c.id}" ${i === 0 ? 'checked' : ''} />
+      ${c.name} <span class="dim">[${c.id}]</span>
+    </label>
+  `).join("");
+
+  // Selection styling
+  el.candidateList.querySelectorAll("input[type=radio]").forEach(radio => {
+    radio.addEventListener("change", () => {
+      el.candidateList.querySelectorAll(".candidate-chip").forEach(ch => ch.classList.remove("selected"));
+      radio.closest(".candidate-chip").classList.add("selected");
+    });
+  });
+}
+
+// ── Render Voter State ───────────────────────────────────────────────────────
 function renderVoter() {
   if (!state.voter) {
-    elements.credentialBox.classList.add("hidden");
-    elements.castButton.disabled = true;
+    el.castBtn.disabled = true;
+    el.verifyBtn.disabled = true;
+    el.commitCkHash.value = "";
+    el.commitPkid.value = "";
     return;
   }
-
-  elements.credentialBox.classList.remove("hidden");
-  elements.castButton.disabled = false;
-  elements.credentialText.textContent = JSON.stringify(
-    {
-      voterId: state.voter.voterId,
-      identityTag: state.voter.identityTag,
-      privateCredentials: state.voter.privateCredentials,
-    },
-    null,
-    2,
-  );
+  el.castBtn.disabled = false;
+  el.commitCkHash.value = state.voter.castingKey?.ckHash || "";
+  el.commitPkid.value = state.voter.pkid || "";
 }
 
-async function checkBackend() {
-  try {
-    const health = await apiRequest("/health");
-    setStatusBadge(
-      `Backend healthy (${new Date(health.timestamp).toLocaleTimeString()})`,
-      "ok",
-    );
-  } catch (error) {
-    setStatusBadge(`Backend unavailable: ${error.message}`, "bad");
-  }
-}
+// ── HANDLERS ─────────────────────────────────────────────────────────────────
 
-async function loadElection() {
-  const body = await apiRequest("/api/election");
-  state.election = body.election;
-  renderElection();
-}
+// Register
+async function handleRegister(e) {
+  e.preventDefault();
+  const tag = el.identityTag.value.trim();
+  if (!tag) return;
 
-async function refreshStats() {
-  try {
-    const body = await apiRequest("/api/votes/stats");
-    elements.statsText.textContent = JSON.stringify(body.stats, null, 2);
-  } catch (error) {
-    elements.statsText.textContent = `Failed to load stats: ${error.message}`;
-  }
-}
-
-async function loadTally() {
-  elements.tallyContainer.textContent = "Loading tally...";
-  try {
-    const body = await apiRequest("/api/results/tally");
-    const tally = body.tally;
-
-    const rows = tally.results
-      .map(
-        (entry) =>
-          `<tr><td>${entry.candidateName}</td><td>${entry.votes}</td></tr>`,
-      )
-      .join("");
-
-    elements.tallyContainer.innerHTML = `
-      <p><strong>Valid Tallied Votes:</strong> ${tally.validTalliedVotes}</p>
-      <p><strong>Accepted Ballots:</strong> ${tally.acceptedBallots}</p>
-      <p><strong>Invalid Encrypted Records:</strong> ${tally.invalidEncryptedRecords}</p>
-      <table>
-        <thead><tr><th>Candidate</th><th>Votes</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    `;
-  } catch (error) {
-    elements.tallyContainer.textContent = `Failed to load tally: ${error.message}`;
-  }
-}
-
-async function verifyReceipt() {
-  if (!state.receipt?.serialNumber) {
-    elements.receiptVerifyMessage.textContent = "No receipt available yet.";
-    return;
-  }
+  btnLoad(el.registerBtn, true);
+  log(`Registering voter: "${tag}"`, "request");
 
   try {
-    const body = await apiRequest(
-      `/api/votes/receipt/${encodeURIComponent(state.receipt.serialNumber)}`,
-    );
-    elements.receiptVerifyMessage.textContent = `Receipt found on board. Status: ${body.receipt.status}`;
-  } catch (error) {
-    elements.receiptVerifyMessage.textContent = `Receipt verification failed: ${error.message}`;
-  }
-}
-
-async function handleRegister(event) {
-  event.preventDefault();
-  elements.registerMessage.textContent = "Registering voter...";
-
-  const identityTag = elements.identityTag.value.trim();
-  if (!identityTag) {
-    elements.registerMessage.textContent = "identityTag is required.";
-    return;
-  }
-
-  try {
-    const body = await apiRequest("/api/register", {
+    const data = await api("/api/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identityTag }),
+      body: JSON.stringify({ identityTag: tag }),
     });
 
     state.voter = {
-      voterId: body.voter.voterId,
-      identityTag: body.voter.identityTag,
-      privateCredentials: body.privateCredentials,
+      voterId: data.voter.voterId,
+      identityTag: data.voter.identityTag,
+      castingKey: data.castingKey,
+      pkid: data.voter.pkid,
+      voterSecret: data.privateCredentials?.voterSecret,
     };
-
-    saveVoterState();
+    save();
     renderVoter();
-    elements.registerMessage.textContent = "Registration successful.";
-    await refreshStats();
-  } catch (error) {
-    elements.registerMessage.textContent = `Registration failed: ${error.message}`;
+
+    const ck = data.castingKey || {};
+    const lines = [
+      `<span class="ok">✓ Voter registered: ${data.voter.voterId}</span>`,
+      "",
+      formatCrypto("ckHash", ck.ckHash),
+      formatCrypto("ckHashE (election-scoped)", ck.ckHashE),
+      formatCrypto("pkid", data.voter.pkid),
+      formatCrypto("voterSecret", data.privateCredentials?.voterSecret),
+      formatCrypto("keyType", ck.keyType),
+      "",
+      `<span class="label">Merkle leaf:</span> <span class="val">Poseidon(ckHashₑ, pkid)</span>`,
+      `<span class="label">BB index:</span> <span class="val">${data.bulletinBoard?.bbIndex}</span>`,
+    ];
+    showOutput(el.registerOut, lines.join("\n"));
+
+    log(`ckHash = ${(ck.ckHash || "").substring(0, 20)}…`, "crypto");
+    log(`pkid   = ${(data.voter.pkid || "").substring(0, 20)}…`, "crypto");
+
+    await refreshProtocolState();
+  } catch (err) {
+    showOutput(el.registerOut, `<span class="err">✗ ${err.message}</span>`);
+  } finally {
+    btnLoad(el.registerBtn, false);
   }
 }
 
-async function handleVote(event) {
-  event.preventDefault();
-  elements.voteMessage.textContent = "Casting vote with proof generation...";
-  elements.receiptVerifyMessage.textContent = "";
-
-  if (!state.voter) {
-    elements.voteMessage.textContent = "Register first.";
+// Commit (Improvement V)
+async function handleCommit(e) {
+  e.preventDefault();
+  const ckHash = el.commitCkHash.value.trim();
+  const pkid = el.commitPkid.value.trim();
+  if (!ckHash || !pkid) {
+    showOutput(el.commitOut, '<span class="err">Register first to get ckHash and pkid.</span>');
     return;
   }
 
-  const selected = document.querySelector('input[name="candidate"]:checked');
-  if (!selected) {
-    elements.voteMessage.textContent = "Select a candidate first.";
-    return;
-  }
+  // Generate a random nonce for the commitment
+  const nonce = BigInt("0x" + crypto.getRandomValues(new Uint8Array(16))
+    .reduce((s, b) => s + b.toString(16).padStart(2, "0"), "")).toString();
+
+  log(`Publishing registration commit (nonce=${nonce.substring(0, 12)}…)`, "request");
 
   try {
-    const body = await apiRequest("/api/votes/cast", {
+    const data = await api("/api/register/commit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        voterId: state.voter.voterId,
-        vote: selected.value,
-      }),
+      body: JSON.stringify({ ckHash, pkid, nonce }),
     });
 
-    state.receipt = body.receipt;
-    elements.voteMessage.textContent = body.message;
-    elements.receiptBox.classList.remove("hidden");
-    elements.receiptText.textContent = JSON.stringify(state.receipt, null, 2);
-    elements.castButton.disabled = true;
-    await refreshStats();
-    await loadTally();
-  } catch (error) {
-    elements.voteMessage.textContent = `Vote failed: ${error.message}`;
+    const lines = [
+      `<span class="ok">✓ Commit published to append-only log</span>`,
+      "",
+      formatCrypto("regCommit", data.regCommit),
+      formatCrypto("nonce", nonce),
+      formatCrypto("commitIndex", data.commitIndex),
+      `<span class="label">timestamp:</span> <span class="val">${data.timestamp}</span>`,
+      "",
+      `<span class="label">Formula:</span> <span class="val">regCommit = Poseidon(ckHash, pkid, nonce)</span>`,
+      `<span class="label">Note:</span> <span class="val">Save nonce for reveal phase verification.</span>`,
+    ];
+    showOutput(el.commitOut, lines.join("\n"));
+    log(`regCommit = ${(data.regCommit || "").substring(0, 24)}…`, "crypto");
+  } catch (err) {
+    showOutput(el.commitOut, `<span class="err">✗ ${err.message}</span>`);
   }
 }
 
-function attachHandlers() {
-  elements.registerForm.addEventListener("submit", handleRegister);
-  elements.voteForm.addEventListener("submit", handleVote);
-  elements.refreshStatsButton.addEventListener("click", refreshStats);
-  elements.loadTallyButton.addEventListener("click", loadTally);
-  elements.verifyReceiptButton.addEventListener("click", verifyReceipt);
+// Cast Vote
+async function handleCast() {
+  if (!state.voter) {
+    showOutput(el.voteOut, '<span class="err">Register first.</span>');
+    return;
+  }
+  const selected = document.querySelector('input[name="candidate"]:checked');
+  if (!selected) {
+    showOutput(el.voteOut, '<span class="err">Select a candidate.</span>');
+    return;
+  }
+
+  btnLoad(el.castBtn, true);
+  log(`Generating Groth16 proof for vote=${selected.value}…`, "request");
+  log(`Circuit: enhanced_vote.circom · 5216 non-linear constraints · Poseidon(4) snHasher`, "system");
+
+  const t0 = performance.now();
+
+  try {
+    const data = await api("/api/votes/cast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ voterId: state.voter.voterId, vote: selected.value }),
+    });
+
+    const dt = ((performance.now() - t0) / 1000).toFixed(2);
+    state.receipt = data.receipt;
+    el.verifyBtn.disabled = false;
+
+    const r = data.receipt || {};
+    const lines = [
+      `<span class="ok">✓ Ballot accepted</span> <span class="time">[proof: ${dt}s]</span>`,
+      "",
+      formatCrypto("serialNumber (sn)", r.serialNumber),
+      formatCrypto("proofHash", r.proofHash || r.proof?.pi_a?.[0]?.substring(0, 32)),
+      formatCrypto("commitment (cm)", r.commitment),
+      "",
+      `<span class="label">sn = Poseidon(eId, ckHashₑ, sk_id, σₑ)</span>`,
+      `<span class="label">σₑ generated ephemerally — delete after voting for forward secrecy</span>`,
+    ];
+    showOutput(el.voteOut, lines.join("\n"));
+
+    log(`sn = ${(r.serialNumber || "").substring(0, 24)}…`, "crypto");
+    log(`Proof generation: ${dt}s`, "success");
+
+    await refreshProtocolState();
+  } catch (err) {
+    showOutput(el.voteOut, `<span class="err">✗ ${err.message}</span>`);
+  } finally {
+    btnLoad(el.castBtn, false);
+  }
 }
 
+// Verify Receipt
+async function handleVerify() {
+  if (!state.receipt?.serialNumber) {
+    log("No receipt to verify.", "warn");
+    return;
+  }
+  try {
+    const data = await api(`/api/votes/receipt/${encodeURIComponent(state.receipt.serialNumber)}`);
+    log(`Receipt verified on bulletin board. Status: ${data.receipt?.status}`, "success");
+    showOutput(el.voteOut, `<span class="ok">✓ Receipt found on board — status: ${data.receipt?.status}</span>`);
+  } catch (err) {
+    log(`Receipt verification failed: ${err.message}`, "error");
+  }
+}
+
+// Audit (Improvement V)
+async function handleAudit() {
+  log("Running censorship audit: comparing commit log against Merkle tree…", "request");
+
+  try {
+    const data = await api("/api/register/audit");
+    const verdict = data.censored ? "⚠ CENSORSHIP DETECTED" : "✓ CLEAN — no censorship";
+    const cls = data.censored ? "err" : "ok";
+
+    const lines = [
+      `<span class="${cls}">${verdict}</span>`,
+      "",
+      `<span class="label">Total commits in log:</span>      <span class="val">${data.totalCommits}</span>`,
+      `<span class="label">Matched in Merkle tree:</span>     <span class="val">${data.matchedCommits}</span>`,
+      `<span class="label">Unmatched (censored):</span>       <span class="${data.unmatchedCommits?.length ? 'err' : 'val'}">${data.unmatchedCommits?.length || 0}</span>`,
+      `<span class="label">Registrations without commit:</span> <span class="val">${data.registrationsWithoutCommit}</span>`,
+    ];
+
+    if (data.unmatchedCommits?.length) {
+      lines.push("", '<span class="warn">Censored commits:</span>');
+      data.unmatchedCommits.forEach(c => {
+        lines.push(`  <span class="err">• ${c.commitHash?.substring(0, 32)}…</span>`);
+      });
+    }
+
+    showOutput(el.auditOut, lines.join("\n"));
+    log(verdict, data.censored ? "error" : "success");
+  } catch (err) {
+    showOutput(el.auditOut, `<span class="err">✗ ${err.message}</span>`);
+  }
+}
+
+// πtotal Proof
+async function handleTotalProof() {
+  log("Fetching πtotal eligibility proof (DLEQ Schnorr)…", "request");
+
+  try {
+    const data = await api("/api/election/total-proof");
+    showOutput(el.auditOut, JSON.stringify(data, null, 2));
+    log(`πtotal verified: ${data.verified ? "VALID" : "INVALID"}`, data.verified ? "success" : "error");
+  } catch (err) {
+    showOutput(el.auditOut, `<span class="err">✗ ${err.message}</span>`);
+  }
+}
+
+// Tally
+async function handleTally() {
+  log("Computing nullification tally: Nullify(msk, cm) for all ballots…", "request");
+
+  try {
+    const data = await api("/api/results/tally");
+    const t = data.tally;
+
+    let html = `<span class="ok">✓ Tally complete</span>\n\n`;
+    html += `<span class="label">Valid votes:</span>   <span class="val">${t.validTalliedVotes}</span>\n`;
+    html += `<span class="label">Total ballots:</span> <span class="val">${t.acceptedBallots}</span>\n`;
+    html += `<span class="label">Invalid:</span>       <span class="${t.invalidEncryptedRecords ? 'warn' : 'val'}">${t.invalidEncryptedRecords}</span>\n\n`;
+
+    html += `<table class="tally-table">`;
+    html += `<thead><tr><th>Candidate</th><th>Votes</th></tr></thead><tbody>`;
+    (t.results || []).forEach(r => {
+      html += `<tr><td>${r.candidateName}</td><td class="vote-count">${r.votes}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+
+    showOutput(el.tallyOut, html);
+    log(`Tally: ${t.validTalliedVotes} valid votes across ${t.results?.length} candidates`, "success");
+  } catch (err) {
+    showOutput(el.tallyOut, `<span class="err">✗ ${err.message}</span>`);
+  }
+}
+
+// Legacy Tally
+async function handleLegacyTally() {
+  log("Fetching legacy (non-nullification) tally…", "request");
+  try {
+    const data = await api("/api/results/legacy-tally");
+    showOutput(el.tallyOut, JSON.stringify(data, null, 2));
+  } catch (err) {
+    showOutput(el.tallyOut, `<span class="err">✗ ${err.message}</span>`);
+  }
+}
+
+// ── ATTACH ───────────────────────────────────────────────────────────────────
+function attach() {
+  el.registerForm.addEventListener("submit", handleRegister);
+  el.commitForm.addEventListener("submit", handleCommit);
+  el.castBtn.addEventListener("click", handleCast);
+  el.verifyBtn.addEventListener("click", handleVerify);
+  el.auditBtn.addEventListener("click", handleAudit);
+  el.totalProofBtn.addEventListener("click", handleTotalProof);
+  el.tallyBtn.addEventListener("click", handleTally);
+  el.legacyTallyBtn.addEventListener("click", handleLegacyTally);
+  el.clearLogBtn.addEventListener("click", () => {
+    el.logContainer.innerHTML = "";
+    log("Log cleared.", "system");
+  });
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
 async function init() {
-  attachHandlers();
-  loadVoterState();
+  attach();
+  restore();
   renderVoter();
-  await checkBackend();
-  await loadElection();
-  await refreshStats();
+
+  log("zkVoting Protocol Dashboard v2.0", "system");
+  log("Circuit: enhanced_vote.circom · Poseidon(4) · Merkle depth 16", "system");
+  log("Improvements: I(πtotal) II(Threshold) III(Unlink) IV(FS) V(Censor) VI(Grace)", "system");
+
+  // Backend check
+  try {
+    const h = await api("/health");
+    el.backendDot().className = "dot dot-on";
+    el.backendLabel.textContent = `backend online · ${new Date(h.timestamp).toLocaleTimeString("en-GB")}`;
+    log(`Backend: ${h.service}`, "success");
+  } catch {
+    el.backendDot().className = "dot dot-error";
+    el.backendLabel.textContent = "backend offline";
+    log("Backend connection failed.", "error");
+    return;
+  }
+
+  await refreshProtocolState();
 }
 
 init();
-

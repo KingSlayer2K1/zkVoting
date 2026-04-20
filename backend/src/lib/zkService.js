@@ -132,9 +132,16 @@ async function computePublicSignals({
   ]);
 }
 
-/** Compute serial number using ckHash (enhanced) or castingKey scalar (legacy). */
-async function computeSerialNumber({ electionId, castingKey, voterSecret, ckHash }) {
+/** Compute serial number using ckHash (enhanced) or castingKey scalar (legacy).
+ *  Improvement IV: includes epochSecret for forward secrecy when provided.
+ */
+async function computeSerialNumber({ electionId, castingKey, voterSecret, ckHash, epochSecret }) {
   const key = ckHash ?? castingKey; // prefer ckHash for the enhanced path
+  if (epochSecret !== undefined && epochSecret !== null) {
+    // Enhanced path with forward secrecy (Improvement IV)
+    return poseidonHash([electionId, key, voterSecret, epochSecret]);
+  }
+  // Legacy/fallback path (3 inputs)
   return poseidonHash([electionId, key, voterSecret]);
 }
 

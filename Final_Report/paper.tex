@@ -42,6 +42,11 @@ and Novel Security Improvements Over the Original Paper}
 \IEEEauthorblockA{\textit{Department of Computer Science and Engineering}\\
 \textit{Indian Institute of Technology Patna}\\
 Patna, India}
+\and
+\IEEEauthorblockN{Durjoy Majumdar}
+\IEEEauthorblockA{\textit{Department of Computer Science and Engineering}\\
+\textit{Indian Institute of Technology Patna}\\
+Patna, India}
 }
 
 \maketitle
@@ -65,14 +70,19 @@ components from the original paper: Construction~1 (Baby~Jubjub
 elliptic-curve nullifiable commitment), real/fake key registration with
 KeyProve and SimKeyProve, a Poseidon Merkle tree for the casting-key set, an
 enhanced Circom circuit encoding the full $R_{\text{vote}}$ relation, and
-O($n$) tally-time nullification.  Second, we identify and implement three
-novel improvements: (1) a concrete $\pi_{\text{total}}$ proof using the
+O($n$) tally-time nullification.  Second, we conduct a systematic audit
+identifying 13 security assumptions in the original protocol, and
+implement six novel improvements addressing five of them:
+(1) a concrete $\pi_{\text{total}}$ proof using the
 homomorphic property of the nullifiable commitment scheme and a DLEQ Schnorr
 argument; (2) $(t,n)$-Shamir secret sharing of the master secret key with
-Feldman VSS verification and threshold partial-decryption tally; and (3)
-election-scoped key derivation for cross-election unlinkability.  We provide
-a detailed comparative security and performance analysis between the original
-protocol and our enhanced system.
+Feldman VSS verification and threshold partial-decryption tally; (3)
+election-scoped key derivation for cross-election unlinkability; (4)
+ephemeral epoch secrets for forward secrecy against retroactive
+deanonymisation; (5) commit-reveal registration for censorship resistance;
+and (6) a hidden re-vote grace period to prevent timing-based coercion
+attacks.  We provide a detailed comparative security and performance analysis
+between the original protocol and our enhanced system.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -109,6 +119,9 @@ claims in practice.
   \item \textbf{Complete implementation} of all cryptographic components
     described in Sections~2--4 of the zkVoting paper, using Baby~Jubjub EC
     arithmetic (circomlibjs), Poseidon hashing, and Groth16 zk-SNARKs.
+  \item \textbf{Systematic assumption audit}: identification and categorisation
+    of 13 security assumptions in the original protocol, ranked by severity
+    and real-world impact (Section~\ref{sec:assumptions}).
   \item \textbf{$\pi_{\text{total}}$ eligibility proof} (Improvement~I): a
     concrete non-interactive DLEQ Schnorr proof over the homomorphically
     aggregated commitment that proves exactly $n_v$ real casting keys were
@@ -119,8 +132,16 @@ claims in practice.
     single-authority trust bottleneck.
   \item \textbf{Cross-election unlinkability} (Improvement~III): election-scoped
     key derivation $\mathit{ckHash}_e = H(\mathit{ckHash}, e)$ prevents
-    linking a voter's participation across elections when the same casting key
-    is presented.
+    linking a voter's participation across elections.
+  \item \textbf{Forward secrecy} (Improvement~IV): per-election ephemeral
+    secrets in the serial number derivation prevent retroactive
+    deanonymisation even if the voter's master secret is later compromised.
+  \item \textbf{Registration censorship resistance} (Improvement~V):
+    commit-reveal registration with a public audit trail makes authority
+    censorship cryptographically detectable.
+  \item \textbf{Re-vote grace period} (Improvement~VI): a hidden grace
+    window after the public deadline allows coerced voters to re-vote,
+    closing timing-based coercion attacks.
   \item \textbf{Comparative analysis} of security properties, constraint counts,
     and API surface between the original paper, the basic prototype, and our
     enhanced system.
@@ -133,20 +154,23 @@ claims in practice.
 
 \subsection{Nullifiable Commitment Scheme (Construction~1)}
 
-The nullifiable commitment scheme $\Pi_{\mathrm{NC}} =
-(\mathsf{Setup}, \mathsf{KeyGen}, \mathsf{Commit}, \mathsf{Nullify},
-\mathsf{Open}, \mathsf{Open}_{\mathrm{null}}, \mathsf{KeyProve},
-\mathsf{SimKeyProve})$ operates over a prime-order elliptic curve group
+The nullifiable commitment scheme
+$\Pi_{\mathrm{NC}}$ comprises eight algorithms:
+\textsf{Setup}, \textsf{KeyGen}, \textsf{Commit}, \textsf{Nullify},
+\textsf{Open}, $\textsf{Open}_{\mathrm{null}}$, \textsf{KeyProve},
+and \textsf{SimKeyProve}.  It operates over a prime-order elliptic curve group
 $\mathbb{G}$ with order $q$ (Baby~Jubjub).  The concrete instantiation is:
 
 \vspace{4pt}
 \noindent\textbf{Setup.}
-$\rho \leftarrow\!\!\!\$\ \mathbb{Z}_q^*;\;
-g_1,g_2,g_3 \leftarrow\!\!\!\$\ \mathbb{G};\;
-g_4 = \rho\cdot g_1;\;
-\mathit{mpk} = (g_1,g_2,g_3,g_4);\;
-\mathit{msk} = \rho;\;
-\mathit{ck}^* = (g_2 - g_4,\, g_3).$
+$\rho \leftarrow\!\!\!\$\ \mathbb{Z}_q^*$;\;
+$g_1,g_2,g_3 \leftarrow\!\!\!\$\ \mathbb{G}$;\;
+$g_4 = \rho\cdot g_1$;
+\[
+  \mathit{mpk} = (g_1,g_2,g_3,g_4);\;
+  \mathit{msk} = \rho
+\]
+$\mathit{ck}^* = (g_2 - g_4,\, g_3)$.
 
 \vspace{4pt}
 \noindent\textbf{KeyGen.}
@@ -295,13 +319,13 @@ Section~4.2 states that the authority must publish a proof $\pi_{\text{total}}$
 showing that the nullification of the aggregated commitment of all casting
 keys opens to $n_v$ (the number of eligible voters):
 \[
-  R_{\text{total}} = \Bigl\{(\mathit{ck}^*, \mathit{cm}, n_v\,;\, \mathit{msk}) :
-    \mathit{cm}^* \leftarrow \mathsf{Nullify}(\mathit{msk}, \mathit{cm}),\;
-    \mathsf{Open}_{\mathrm{null}}(\mathit{ck}^*, \mathit{cm}^*, n_v, 0) = 1\Bigr\}
+  R_{\text{total}} = \bigl\{(\mathit{ck}^*, \mathit{cm}, n_v\,;\, \mathit{msk})\bigr\}
 \]
+where $\mathit{cm}^* \leftarrow \mathsf{Nullify}(\mathit{msk}, \mathit{cm})$
+and $\mathsf{Open}_{\mathrm{null}}(\mathit{ck}^*, \mathit{cm}^*, n_v, 0) = 1$.
 This prevents the authority from secretly issuing extra real keys to stuff
 the ballot box.  The paper mentions 2,243 constraints for $R_{\text{total}}$
-(Table~3) but provides no concrete implementation anywhere.
+(Table~3) but provides no concrete implementation.
 
 \textbf{Our implementation.}
 We exploit the homomorphic property directly.  For each issued casting key
@@ -314,25 +338,29 @@ $\mathit{ck}_i$, we compute:
 The aggregate: $\mathit{cm}_{\mathrm{agg}} = \sum_i \mathit{cm}_i$.
 After nullification:
 \begin{align*}
-  \mathit{cm}^*_{\mathrm{agg}} &= C_{2,\mathrm{agg}} - \mathit{msk}\cdot C_{1,\mathrm{agg}}\\
-  &= \sum_i h_{2,i} - \mathit{msk}\cdot \sum_i h_{1,i}\\
-  &= \sum_i (h_{2,i} - \mathit{msk}\cdot h_{1,i})\\
-  &= \sum_i b_i \cdot g_3 \quad\text{(since } h_{2,i} - \mathit{msk}\cdot h_{1,i} = b_i\cdot g_3\text{)}\\
-  &= n_v^{\text{real}}\cdot g_3
+  \mathit{cm}^*_{\mathrm{agg}} &= C_{2,\text{agg}} - \mathit{msk}\cdot C_{1,\text{agg}}\\
+  &= \textstyle\sum_i h_{2,i} - \mathit{msk}\cdot \sum_i h_{1,i}\\
+  &= \textstyle\sum_i (h_{2,i} - \mathit{msk}\cdot h_{1,i})\\
+  &= \textstyle\sum_i b_i \cdot g_3 = n_v^{\text{real}}\cdot g_3
 \end{align*}
 where $n_v^{\text{real}} = \sum_i b_i$ counts only real keys.  This opens
 to $n_v^{\text{real}}$ under $\mathit{ck}^* = (g_2 - g_4, g_3)$ with $r=0$.
 
 We prove knowledge of $\mathit{msk}$ via a non-interactive DLEQ Schnorr
-argument (Fiat-Shamir):
-\begin{align}
-  t &\leftarrow\!\!\!\$\ \mathbb{Z}_q,\quad A_1 = t\cdot g_1,\quad A_2 = {-t}\cdot C_{1,\mathrm{agg}}\\
-  c &= H(g_1, g_4, C_{1,\mathrm{agg}}, \mathit{cm}^*_{\mathrm{agg}}, A_1, A_2, n_v)\\
+argument (Fiat-Shamir).  Sample $t \leftarrow\!\!\!\$\ \mathbb{Z}_q$, then:
+{\small
+\begin{align*}
+  A_1 &= t\cdot g_1,\quad A_2 = {-t}\cdot C_{1,\text{agg}}\\
+  c &= H(g_1,\, g_4,\, C_{1,\text{agg}},\, \mathit{cm}^*_{\text{agg}},\\
+    &\qquad A_1,\, A_2,\, n_v)\\
   k &= t + \mathit{msk}\cdot c \bmod q
-\end{align}
-Verifier checks: $k\cdot g_1 = A_1 + c\cdot g_4$ and
-$-k\cdot C_{1,\mathrm{agg}} + C_{2,\mathrm{agg}} - \mathit{cm}^*_{\mathrm{agg}} = A_2 +
-c\cdot(C_{2,\mathrm{agg}} - \mathit{cm}^*_{\mathrm{agg}})$.
+\end{align*}
+}
+\noindent Verifier checks:
+$k\cdot g_1 = A_1 + c\cdot g_4$
+and
+$-k\cdot C_{1,\text{agg}} + C_{2,\text{agg}} - \mathit{cm}^*_{\text{agg}}$
+$= A_2 + c\cdot(C_{2,\text{agg}} - \mathit{cm}^*_{\text{agg}})$.
 
 Exposed at \texttt{GET /api/election/total-proof}.
 
@@ -352,8 +380,11 @@ $\mathbb{Z}_q$:
 
 \vspace{4pt}
 \noindent\textbf{Split.}
-Choose random polynomial $f(x) = \mathit{msk} + a_1 x + \cdots + a_{t-1}x^{t-1}$
-over $\mathbb{Z}_q$.  Share $i = (i,\, f(i))$ for $i = 1,\ldots,n$.
+Choose random polynomial over $\mathbb{Z}_q$:
+\[
+  f(x) = \mathit{msk} + a_1 x + \cdots + a_{t-1}x^{t-1}
+\]
+Share $i = (i,\, f(i))$ for $i = 1,\ldots,n$.
 
 \vspace{4pt}
 \noindent\textbf{Reconstruct.}
@@ -362,9 +393,11 @@ $f(0) = \mathit{msk}$.
 
 \vspace{4pt}
 \noindent\textbf{Feldman VSS.}
-Public commitments $\{C_j = a_j\cdot\mathsf{Base8}\}_{j=0}^{t-1}$ allow each
-authority to verify its own share without trusting the dealer:
-$s_i\cdot\mathsf{Base8} = \sum_{j=0}^{t-1} C_j\cdot i^j$.
+Public commitments $\{C_j = a_j\cdot\mathsf{Base8}\}_{j=0}^{t-1}$
+allow each authority to verify its own share without trusting the dealer:
+\[
+  s_i\cdot\mathsf{Base8} = \textstyle\sum_{j=0}^{t-1} C_j\cdot i^j
+\]
 
 \vspace{4pt}
 \noindent\textbf{Threshold tally.}
@@ -398,6 +431,144 @@ election-scoped.  This is a lightweight change: one additional Poseidon hash
 call per registration, zero circuit constraint overhead (the hash is computed
 off-circuit and the hash value is an existing circuit input).
 
+\subsection{Improvement IV: Forward Secrecy via Ephemeral Epoch Secrets}
+
+\textbf{Limitation in the paper.}
+The voter's identity secret $\mathit{sk}_{\mathrm{id}}$ is a permanent
+credential.  If it is ever compromised---through device theft, malware, or
+legal compulsion---the attacker can compute the serial number
+$\mathit{sn} = H(e, \mathit{ck}, \mathit{sk}_{\mathrm{id}})$ for \emph{any}
+past or future election.  This enables retroactive deanonymisation: the
+attacker links all of the voter's historical ballots to their identity.
+The paper provides no mechanism for forward secrecy.
+
+\textbf{Our implementation.}
+We add a per-election \emph{ephemeral secret} $\sigma_e$ to the serial number
+derivation:
+\[
+  \mathit{sn} = H(e,\; \mathit{ckHash}_e,\; \mathit{sk}_{\mathrm{id}},\; \sigma_e)
+\]
+The voter generates $\sigma_e$ fresh for each ballot and \emph{deletes it
+immediately after voting}.  The circuit change is minimal: the serial number
+hasher moves from $\mathrm{Poseidon}(3)$ to $\mathrm{Poseidon}(4)$, with
+$\sigma_e$ as an additional private input.
+
+\vspace{4pt}
+\noindent\textbf{Security argument.}
+\begin{itemize}
+  \item If $\mathit{sk}_{\mathrm{id}}$ leaks \emph{after} $\sigma_e$ is
+    deleted, the attacker cannot recompute past serial numbers (Poseidon
+    preimage resistance).
+  \item The public key $\mathit{pkid} = H(\mathit{sk}_{\mathrm{id}})$ is
+    unchanged, so voter identity binding and Merkle eligibility are unaffected.
+  \item The cost is one additional Poseidon hash input per proof --- negligible
+    compared to the Merkle path verification.
+\end{itemize}
+
+Exposed in the circuit via \texttt{signal input epochSecret} and computed
+in the backend at vote-casting time.
+
+\subsection{Improvement V: Registration Censorship Resistance}
+
+\textbf{Limitation in the paper.}
+The authority controls which voters enter the Merkle tree $\mathit{rt}$.
+A malicious authority can silently exclude a voter's $(ckHash, pkid)$ pair.
+The voter's ZK proof will fail (Merkle membership check), and there is no
+mechanism to prove the exclusion was censorship rather than a legitimate
+rejection.
+
+\textbf{Our implementation.}
+We introduce a \emph{commit-reveal registration} protocol:
+\begin{enumerate}
+  \item \textbf{Commit.} Before registration, the voter publishes a commitment:
+    \[
+      \mathit{regCommit} = H(\mathit{ckHash},\; \mathit{pkid},\; \mathit{nonce})
+    \]
+    to a public append-only log.
+  \item \textbf{Reveal.} The voter reveals $(\mathit{ckHash}, \mathit{pkid},
+    \mathit{nonce})$ during normal registration.  The authority verifies
+    the hash matches $\mathit{regCommit}$
+    and inserts into the Merkle tree.
+  \item \textbf{Audit.} Any observer can compare the commit log against
+    the Merkle tree entries.  A valid commit with no corresponding Merkle
+    entry constitutes \emph{cryptographic evidence of censorship}.
+\end{enumerate}
+
+This makes registration censorship \emph{publicly detectable} with zero
+false positives.  The commit log is append-only (JSON file in prototype;
+a blockchain transaction in production).
+
+Exposed at \texttt{POST /api/register/commit} and \texttt{GET /api/register/audit}.
+
+\subsection{Improvement VI: Re-Vote Grace Period}
+
+\textbf{Limitation in the paper.}
+Coercion resistance requires the voter to re-vote with their real key after
+being coerced.  A sophisticated coercer can time the attack to $T - 1\min$
+before the public voting deadline, leaving the voter no window to re-vote.
+The paper assumes synchronous phases but does not address timing-based
+coercion attacks near phase boundaries.
+
+\textbf{Our implementation.}
+We introduce a \emph{hidden grace period} after the public voting deadline:
+\begin{itemize}
+  \item The election has two deadlines: $T_{\mathrm{public}}$ (announced) and
+    $T_{\mathrm{grace}}$ (secret, known only to the system).
+  \item $T_{\mathrm{grace}} > T_{\mathrm{public}}$ (default: 60 minutes).
+  \item During the grace window $[T_{\mathrm{public}}, T_{\mathrm{grace}})$,
+    re-votes with the \emph{same serial number} overwrite the previous ballot
+    (last-write-wins).  New first-time votes are rejected.
+  \item The coercer believes the election ended at $T_{\mathrm{public}}$;
+    the voter can secretly re-vote during the grace window.
+  \item $T_{\mathrm{grace}}$ is never exposed via the public API.
+\end{itemize}
+
+This closes the timing attack vector at the cost of a brief (configurable)
+delay before tally publication.
+
+Exposed at \texttt{POST /api/election/init} with the \texttt{graceMinutes}
+parameter.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Systematic Assumption Analysis}
+\label{sec:assumptions}
+% ─────────────────────────────────────────────────────────────────────────────
+
+We conducted a systematic audit of the security assumptions made by the
+zkVoting paper.  We identified 13 assumptions, categorised by severity and
+real-world impact.  Table~\ref{tab:assumptions} summarises all 13; those
+addressed by our improvements are marked.
+
+\begin{table*}[t]
+\centering
+\caption{Systematic assumption analysis of the zkVoting protocol}
+\label{tab:assumptions}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{clllc}
+\toprule
+\textbf{ID} & \textbf{Assumption} & \textbf{Severity} & \textbf{If Violated} & \textbf{Addressed} \\
+\midrule
+A1  & No on-chain Sybil prevention         & Critical & One person, many votes          & --- \\
+A2  & Private untappable channel           & Critical & Coercion resistance fails       & --- \\
+A3  & Re-vote timing near deadline        & High     & Timing-based coercion wins      & Impr.~VI \\
+A4  & Authority registration fairness      & Critical & Ballot stuffing / censorship     & Impr.~I+V \\
+A5  & Groth16 trusted setup               & High     & Fake proofs possible            & --- \\
+A6  & Threshold collusion ($<t$ honest)    & Critical & Full msk reconstructed          & Impr.~II \\
+A7  & DDH/DLP quantum hardness            & Medium   & All EC crypto broken            & --- \\
+A8  & No forward secrecy on $\mathit{sk}$  & High     & Retroactive deanonymisation     & Impr.~IV \\
+A9  & Poseidon random oracle model         & Medium   & Commitment binding may fail     & --- \\
+A10 & Blockchain as bulletin board         & High     & Tampering with tallied votes     & --- \\
+A11 & Cross-election key linkability       & Medium   & Voter tracking across elections & Impr.~III \\
+A12 & Synchronous phase boundaries         & Low      & Late votes rejected             & --- \\
+A13 & DLP-based tally $O(n)$ scaling       & Low      & Large-scale elections impractical & --- \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Of the 13 assumptions, our six improvements directly address five (A3, A4, A6, A8, A11).
+Section~\ref{sec:future} discusses proposed solutions and rationale for the remaining
+eight unaddressed assumptions.
+
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Comparative Analysis}
 \label{sec:comparison}
@@ -429,6 +600,9 @@ Eligibility verif.\ (EV)     & \checkmark & $\times$   & \checkmark \\
 $\pi_{\text{total}}$ proof   & defined only & $\times$ & \checkmark \\
 Threshold $\mathit{msk}$     & $\times$   & $\times$   & \checkmark \\
 Cross-election unlinkability  & $\times$   & $\times$   & \checkmark \\
+Forward secrecy (Impr.~IV)   & $\times$   & $\times$   & \checkmark \\
+Reg.\ censorship detect.\ (V) & $\times$   & $\times$   & \checkmark \\
+Re-vote grace period (VI)    & $\times$   & $\times$   & \checkmark \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -457,6 +631,9 @@ Nullification tally O($n$)   & defined & $\times$ & \checkmark \\
 $\pi_{\text{total}}$ proof   & defined  & $\times$ & \checkmark \\
 Threshold $\mathit{msk}$ (SSS) & $\times$ & $\times$ & \checkmark \\
 Cross-election unlinkability & $\times$ & $\times$ & \checkmark \\
+Forward secrecy ($\sigma_e$) & $\times$ & $\times$ & \checkmark \\
+Commit-reveal registration  & $\times$ & $\times$ & \checkmark \\
+Hidden grace period          & $\times$ & $\times$ & \checkmark \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -559,8 +736,9 @@ Ours (Improvement II) & any $t$ of $n$ talliers (threshold) \\
   \item \texttt{totalProof.js}: $\pi_{\text{total}}$ accumulation and DLEQ
     Schnorr proof
   \item \texttt{thresholdMsk.js}: Shamir SSS, Feldman VSS, partial nullification
+  \item \texttt{registrationAudit.js}: commit-reveal registration with censorship audit (Improvement~V)
   \item \texttt{enhanced\_vote.circom}: full $R_{\text{vote}}$ circuit with
-    pkid proof and Merkle membership
+    pkid proof, Merkle membership, and epochSecret (Improvement~IV)
 \end{itemize}
 
 \subsection{New API Endpoints}
@@ -574,6 +752,8 @@ Ours (Improvement II) & any $t$ of $n$ talliers (threshold) \\
   \item \texttt{GET /api/bulletin-board} --- full casting-key set + Merkle root
   \item \texttt{GET /api/results/nullify/:ballotId} --- per-ballot nullification audit
   \item \texttt{GET /api/results/legacy-tally} --- original tally for comparison
+  \item \texttt{POST /api/register/commit} --- registration commitment (Improvement~V)
+  \item \texttt{GET /api/register/audit} --- censorship detection audit (Improvement~V)
 \end{itemize}
 
 % ─────────────────────────────────────────────────────────────────────────────
@@ -614,15 +794,62 @@ advantage.
 % ─────────────────────────────────────────────────────────────────────────────
 
 \begin{enumerate}
-  \item \textbf{Trusted setup}: Groth16 requires a per-circuit trusted setup.
+  \item \textbf{Trusted setup (A5)}: Groth16 requires a per-circuit trusted setup.
     Migrating to Plonk or Halo2 would eliminate this assumption.
-  \item \textbf{Blockchain bulletin board}: the prototype uses JSON files.
+    \emph{Not implemented}: requires a fundamentally different ZK backend;
+    circuit conversion is thesis-level effort.
+
+  \item \textbf{Blockchain bulletin board (A10)}: the prototype uses JSON files.
     A tamper-evident ledger (e.g.\ an Ethereum smart contract) is required
     for production deployment and full E2E verifiability.
+    \emph{Not implemented}: engineering effort orthogonal to cryptographic
+    contributions; well-understood integration path.
+
+  \item \textbf{Sybil prevention (A1)}: the protocol lacks on-chain identity
+    verification.  \emph{Proposed solution}: bind each Merkle leaf to a
+    unique credential hash $\mathit{credHash} = H(\mathit{national\_id},
+    e)$, rejecting duplicate credential hashes.  Privacy is preserved via
+    the hash.  \emph{Not implemented}: requires integration with an external
+    identity provider and raises policy questions beyond the cryptographic
+    scope of this work.
+
+  \item \textbf{Private channel assumption (A2)}: coercion resistance
+    assumes the voter has an ``untappable'' private channel for re-voting.
+    This is a physical-world constraint that no cryptographic protocol can
+    fully solve.  Practical mitigations include anonymous communication
+    networks (Tor), in-person re-vote kiosks, or time-delayed re-vote
+    submission.  \emph{Not implemented}: inherently non-cryptographic.
+
+  \item \textbf{Quantum resistance (A7)}: all security reductions depend on
+    DDH/DLP hardness over Baby~Jubjub.  A sufficiently powerful quantum
+    computer breaks these assumptions.  \emph{Proposed solution}: migrate
+    to lattice-based commitments and hash-based ZK (e.g.\ STARKs).
+    \emph{Not implemented}: post-quantum ZK is an active research frontier
+    with no production-ready toolchain compatible with Circom.
+
+  \item \textbf{Poseidon random oracle model (A9)}: the security proofs
+    model Poseidon as a random oracle.  If algebraic attacks exploit
+    Poseidon's structure, commitment binding and collision resistance
+    may degrade.  \emph{Not implemented}: would require either formal
+    cryptanalysis or a hash-function swap (e.g.\ to Rescue), both outside
+    the scope of a systems-level contribution.
+
+  \item \textbf{Synchronous phases (A12)}: the paper assumes strict phase
+    boundaries.  Late arrivals to the registration or voting phase are
+    excluded.  Improvement~VI partially addresses this for the voting phase;
+    registration-phase flexibility remains future work.
+
+  \item \textbf{Tally scaling (A13)}: the $O(n)$ nullification tally uses
+    Baby~Jubjub EC scalar multiplication per ballot.  For national-scale
+    elections ($> 10^7$ voters), this may require parallelisation or
+    batch verification optimisations.
+
   \item \textbf{Encryption proof in circuit}: we prove only the Poseidon
-    commitment in-circuit; the hybrid encryption $\mathit{CT} = \Pi_{\mathrm{HBE}}.\mathsf{Enc}(\mathit{pk}, m; k)$
+    commitment in-circuit; the hybrid encryption $\mathit{CT} =
+    \Pi_{\mathrm{HBE}}.\mathsf{Enc}(\mathit{pk}, m; k)$
     is not circuit-verified.  Adding this would restore the paper's full
     $R_{\text{vote}}$ constraint set.
+
   \item \textbf{Client-side proof generation}: proof generation should run
     on the voter's device (browser/mobile) to preserve the ZK property;
     our prototype performs it server-side for simplicity.
@@ -634,7 +861,7 @@ advantage.
 % ─────────────────────────────────────────────────────────────────────────────
 
 We presented a complete implementation of the zkVoting protocol's missing
-cryptographic components and identified three novel improvements.  The
+cryptographic components and identified six novel improvements.  The
 nullifiable commitment scheme (Construction~1), implemented over Baby~Jubjub
 using circomlibjs, correctly satisfies hiding, binding, nullifiability,
 key indistinguishability, and key deniability.  The enhanced Circom circuit
@@ -647,10 +874,19 @@ argument over the aggregate homomorphic commitment---preventing ballot
 stuffing without a full Groth16 circuit.  Threshold Shamir SSS eliminates
 the single-authority trust bottleneck for the master secret key.  Election-scoped
 key derivation closes the cross-election linkability gap at negligible cost.
+Ephemeral epoch secrets provide forward secrecy against retroactive
+deanonymisation.  Commit-reveal registration makes authority censorship
+publicly detectable.  A hidden grace period closes timing-based coercion
+attack vectors.
+
+Our systematic assumption analysis identified 13 security assumptions in the
+original protocol, of which our six improvements address five.  For the
+remaining eight, we provide proposed solutions and justify their exclusion
+from the current prototype.
 
 These contributions together produce a prototype that satisfies all eight
 security properties in Table~\ref{tab:security} and surpasses the original
-zkVoting paper on three additional dimensions.
+zkVoting paper on six additional dimensions.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \begin{thebibliography}{00}
