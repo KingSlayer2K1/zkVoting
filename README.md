@@ -166,12 +166,15 @@ This runs NC Setup, splits `msk` into 3 shares (any 2 can reconstruct), and init
 | `GET` | `/api/results/legacy-tally` | Original decryption-only tally (for comparison) |
 | `GET` | `/api/results/nullify/:ballotId` | Per-ballot nullification audit |
 
-### Other
+### Other / Dashboard
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/bulletin-board` | Public Merkle tree state |
 | `GET` | `/health` | Health check |
+| `GET` | `/api/admin/voters` | Full voter registry (status, keys, proofs) |
+| `GET` | `/api/admin/raw/:file` | Raw JSON backend db viewer (`votes.json`, etc.) |
+| `POST` | `/api/admin/reset` | Purge data cache for fresh experiment run |
 
 ## Cryptographic Protocol Summary
 

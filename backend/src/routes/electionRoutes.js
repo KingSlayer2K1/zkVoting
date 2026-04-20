@@ -26,9 +26,15 @@ router.get("/", async (_req, res, next) => {
   try {
     const election = await readJson("election.json", {
       electionId: "1001",
-      name: "zkVoting Demo Election",
-      description: "Default election data",
-      candidates: [],
+      name: "zkVoting Enhanced Demo",
+      description: "Demonstrating improvements over the zkVoting paper",
+      candidates: [
+        { id: "1", name: "Alice" },
+        { id: "2", name: "Bob" },
+        { id: "3", name: "Charlie" },
+        { id: "4", name: "Diana" },
+        { id: "5", name: "Eve" },
+      ],
     });
 
     res.json({

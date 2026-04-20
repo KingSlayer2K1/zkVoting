@@ -262,13 +262,16 @@ router.post("/fake-key", async (req, res, next) => {
       0
     );
 
+    // Improvement 3: Cross-election unlinkability for fake keys
+    const fakeKeyHashE = await poseidonHash([fakeKeyHash, election.electionId]);
+
     // Also append the fake key to the bulletin board (indistinguishable from real)
     const { index: bbIndex, root: merkleRoot, proof: merkleProof } =
-      await appendEntry(fakeKeyHash, voter.pkid);
+      await appendEntry(fakeKeyHashE, voter.pkid);
 
     // Record on the voter (server privately knows it's fake via msk)
     if (!voter.fakeKeys) voter.fakeKeys = [];
-    voter.fakeKeys.push({ ck: fakeKey, ckHash: fakeKeyHash, bbIndex });
+    voter.fakeKeys.push({ ck: fakeKey, ckHash: fakeKeyHash, ckHashE: fakeKeyHashE, bbIndex });
     await writeJson("voters.json", voters);
 
     return res.status(201).json({
@@ -279,6 +282,7 @@ router.post("/fake-key", async (req, res, next) => {
       fakeKey: {
         ck: fakeKey,
         ckHash: fakeKeyHash,
+        ckHashE: fakeKeyHashE,
         keyType: "fake",
       },
       keyProof: {

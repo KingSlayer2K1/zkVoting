@@ -72,6 +72,65 @@ app.get("/api/bulletin-board", async (_req, res, next) => {
   }
 });
 
+// ── Admin / Research endpoints ───────────────────────────────────────────────
+
+const fs = require("fs");
+const DATA_DIR = path.resolve(__dirname, "..", "data");
+
+// List all registered voters (for dashboard voter selector)
+app.get("/api/admin/voters", async (_req, res, next) => {
+  try {
+    const { readJson } = require("./lib/jsonStore");
+    const voters = await readJson("voters.json", []);
+    res.json({
+      ok: true,
+      voters: voters.map((v) => ({
+        voterId: v.voterId,
+        identityTag: v.identityTag,
+        keyType: v.keyType || "real",
+        pkid: v.pkid,
+        ckHash: v.ckHash,
+        ckHashE: v.ckHashE,
+        bbIndex: v.bbIndex,
+        hasSubmittedBallot: v.hasSubmittedBallot,
+        createdAt: v.createdAt,
+        hasFakeKeys: !!(v.fakeKeys && v.fakeKeys.length),
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+// Raw JSON data file viewer
+app.get("/api/admin/raw/:filename", (req, res) => {
+  const allowed = ["voters.json","votes.json","election.json","nullifiers.json","bulletinBoard.json","registrationCommits.json"];
+  const file = req.params.filename;
+  if (!allowed.includes(file)) return res.status(400).json({ ok: false, error: "File not allowed." });
+  const filePath = path.join(DATA_DIR, file);
+  try {
+    const raw = fs.readFileSync(filePath, "utf8");
+    res.json({ ok: true, filename: file, data: JSON.parse(raw) });
+  } catch {
+    res.json({ ok: true, filename: file, data: null, note: "File does not exist yet." });
+  }
+});
+
+// Reset all data (for fresh experiments)
+app.post("/api/admin/reset", async (_req, res) => {
+  const files = {
+    "voters.json": "[]",
+    "votes.json": "[]",
+    "nullifiers.json": "[]",
+    "bulletinBoard.json": '{"entries":[],"root":null,"depth":16}',
+    "registrationCommits.json": '{"commits":[]}',
+  };
+  for (const [name, content] of Object.entries(files)) {
+    fs.writeFileSync(path.join(DATA_DIR, name), content);
+  }
+  // Remove election.json to allow re-init
+  try { fs.unlinkSync(path.join(DATA_DIR, "election.json")); } catch {}
+  res.json({ ok: true, message: "All data wiped. Ready for new experiment." });
+});
+
 // ── Frontend static files ────────────────────────────────────────────────────
 const frontendDir = path.resolve(__dirname, "..", "..", "frontend");
 app.use(express.static(frontendDir));

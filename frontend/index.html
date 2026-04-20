@@ -1,76 +1,74 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>zkVoting — Protocol Dashboard</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
-  <body>
-    <div class="dashboard">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>zkVoting — Research Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="dashboard">
 
-      <!-- ══ TOP BAR ══ -->
-      <header class="topbar">
-        <div class="topbar-left">
-          <span class="logo">⬡ zkVoting</span>
-          <span class="version">v2.0 — enhanced protocol</span>
-        </div>
-        <div class="topbar-right">
-          <span class="indicator" id="backendIndicator">
-            <span class="dot dot-pending"></span>
-            <span id="backendLabel">connecting…</span>
-          </span>
-          <span class="indicator" id="electionIndicator">
-            <span class="dot dot-off"></span>
-            <span id="electionLabel">no election</span>
-          </span>
-          <span class="indicator">
-            <span class="dot dot-on"></span>
-            <span>circom 2.2.3 · groth16 · 5216 constraints</span>
-          </span>
-        </div>
-      </header>
+  <!-- ═══ TOP BAR ═══ -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="logo">⬡ zkVoting</span>
+      <span class="version">Research Dashboard v3</span>
+    </div>
+    <div class="topbar-right">
+      <span class="indicator" id="backendIndicator">
+        <span class="dot dot-pending"></span>
+        <span id="backendLabel">connecting…</span>
+      </span>
+      <span class="indicator" id="electionIndicator">
+        <span class="dot dot-off"></span>
+        <span id="electionLabel">no election</span>
+      </span>
+      <span class="indicator">
+        <span class="dot dot-on"></span>
+        <span>circom 2.2.3 · groth16 · bn128</span>
+      </span>
+      <span class="indicator active-voter-indicator" id="activeVoterIndicator">
+        <span class="dot dot-off"></span>
+        <span id="activeVoterLabel">no active voter</span>
+      </span>
+    </div>
+  </header>
 
-      <!-- ══ MAIN LAYOUT ══ -->
-      <div class="main-layout">
+  <!-- ═══ TAB BAR ═══ -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="simulation">① Simulation</button>
+    <button class="tab-btn" data-tab="inspector">② Data Inspector</button>
+    <button class="tab-btn" data-tab="audit">③ Audit &amp; Proofs</button>
+    <button class="tab-btn" data-tab="log">④ Protocol Log</button>
+  </nav>
 
-        <!-- ─── LEFT: Protocol Steps ─── -->
-        <div class="panel-column">
+  <!-- ═══ TAB CONTENT ═══ -->
+  <div class="tab-content">
 
-          <!-- Protocol State -->
-          <section class="panel" id="protocolPanel">
+    <!-- ─── TAB 1: SIMULATION ─── -->
+    <div class="tab-pane active" id="tab-simulation">
+      <div class="sim-layout">
+
+        <!-- Column A: Election + Register -->
+        <div class="sim-col">
+
+          <!-- Election Control -->
+          <section class="panel">
             <div class="panel-header">
-              <span class="panel-icon">◈</span>
-              <h2>Protocol State</h2>
+              <span class="panel-icon">⚙</span>
+              <h2>Election Control</h2>
             </div>
             <div class="state-grid" id="protocolState">
-              <div class="state-item">
-                <span class="state-label">Election ID</span>
-                <span class="state-value mono" id="stateElectionId">—</span>
-              </div>
-              <div class="state-item">
-                <span class="state-label">Merkle Root (rt)</span>
-                <span class="state-value mono truncate" id="stateMerkleRoot">—</span>
-              </div>
-              <div class="state-item">
-                <span class="state-label">Registered Voters</span>
-                <span class="state-value mono" id="stateVoterCount">0</span>
-              </div>
-              <div class="state-item">
-                <span class="state-label">Ballots Cast</span>
-                <span class="state-value mono" id="stateBallotCount">0</span>
-              </div>
-              <div class="state-item">
-                <span class="state-label">Threshold (t, n)</span>
-                <span class="state-value mono" id="stateThreshold">—</span>
-              </div>
-              <div class="state-item">
-                <span class="state-label">Grace Period</span>
-                <span class="state-value mono" id="stateGrace">—</span>
-              </div>
+              <div class="state-item"><span class="state-label">Election ID</span><span class="state-value mono" id="stElectionId">—</span></div>
+              <div class="state-item"><span class="state-label">Merkle Root</span><span class="state-value mono truncate" id="stMerkleRoot">—</span></div>
+              <div class="state-item"><span class="state-label">Voters</span><span class="state-value mono" id="stVoterCount">0</span></div>
+              <div class="state-item"><span class="state-label">Ballots</span><span class="state-value mono" id="stBallotCount">0</span></div>
+              <div class="state-item"><span class="state-label">Threshold</span><span class="state-value mono" id="stThreshold">—</span></div>
+              <div class="state-item"><span class="state-label">Grace</span><span class="state-value mono" id="stGrace">—</span></div>
             </div>
             <div class="improvements-row">
               <span class="imp-chip active">I π<sub>total</sub></span>
@@ -80,9 +78,16 @@
               <span class="imp-chip active">V Censor</span>
               <span class="imp-chip active">VI Grace</span>
             </div>
+            <div class="form-row mt">
+              <button class="btn" id="initElectionBtn">INIT ELECTION</button>
+              <input id="initT" type="number" value="2" min="2" max="10" style="width:50px" title="threshold t" />
+              <input id="initN" type="number" value="3" min="2" max="10" style="width:50px" title="authorities n" />
+              <input id="initGrace" type="number" value="60" min="0" style="width:60px" title="grace min" />
+              <button class="btn btn-danger" id="resetAllBtn">⟲ RESET ALL</button>
+            </div>
           </section>
 
-          <!-- Step 1: Register -->
+          <!-- Register -->
           <section class="panel">
             <div class="panel-header">
               <span class="panel-icon step-num">1</span>
@@ -90,96 +95,288 @@
               <span class="tag">KeyGen(mpk) → (ck, pkid)</span>
             </div>
             <form id="registerForm" class="form-row">
-              <input id="identityTag" placeholder="identity tag (e.g. voter-001)" required autocomplete="off" />
+              <input id="identityTag" placeholder="identity tag" required autocomplete="off" />
               <button type="submit" class="btn" id="registerBtn">REGISTER</button>
             </form>
-            <div id="registerOutput" class="output-box hidden"></div>
+            <div id="registerOut" class="output-box hidden"></div>
           </section>
 
-          <!-- Step 2: Commit (Improvement V) -->
+          <!-- Commit -->
           <section class="panel">
             <div class="panel-header">
               <span class="panel-icon step-num">2</span>
-              <h2>Commit Registration</h2>
+              <h2>Commit</h2>
               <span class="tag tag-imp">Improvement V</span>
             </div>
-            <p class="panel-note">regCommit = Poseidon(ckHash, pkid, nonce) → append-only log</p>
-            <form id="commitForm" class="form-row">
-              <input id="commitCkHash" placeholder="ckHash (auto-filled)" class="mono-input" />
-              <input id="commitPkid" placeholder="pkid (auto-filled)" class="mono-input" />
-              <button type="submit" class="btn btn-alt">COMMIT</button>
-            </form>
-            <div id="commitOutput" class="output-box hidden"></div>
+            <p class="panel-note">regCommit = Poseidon(ckHash, pkid, nonce)</p>
+            <div class="form-row">
+              <button class="btn btn-alt" id="commitBtn">COMMIT FOR ACTIVE VOTER</button>
+            </div>
+            <div id="commitOut" class="output-box hidden"></div>
           </section>
 
-          <!-- Step 3: Cast Vote -->
+          <!-- Batch Ops -->
+          <section class="panel">
+            <div class="panel-header">
+              <span class="panel-icon">⚡</span>
+              <h2>Batch Operations</h2>
+            </div>
+            <div class="form-row">
+              <input id="batchCount" type="number" value="3" min="1" max="20" style="width:60px" />
+              <button class="btn" id="batchRegisterBtn">BATCH REGISTER</button>
+              <button class="btn btn-alt" id="batchVoteBtn">BATCH VOTE ALL</button>
+            </div>
+            <div id="batchOut" class="output-box hidden"></div>
+          </section>
+        </div>
+
+        <!-- Column B: Voter Registry + Cast Vote -->
+        <div class="sim-col">
+
+          <!-- Voter Registry -->
+          <section class="panel">
+            <div class="panel-header">
+              <span class="panel-icon">👤</span>
+              <h2>Voter Registry</h2>
+              <button class="btn btn-outline btn-xs" id="refreshVotersBtn">↻ REFRESH</button>
+            </div>
+            <div class="table-scroll" id="voterTableWrap">
+              <table class="data-table" id="voterTable">
+                <thead><tr><th>Tag</th><th>Key</th><th>BB#</th><th>Voted</th><th></th></tr></thead>
+                <tbody id="voterTableBody"><tr><td colspan="5" class="dim">No voters yet.</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Cast Vote -->
           <section class="panel">
             <div class="panel-header">
               <span class="panel-icon step-num">3</span>
               <h2>Cast Ballot</h2>
               <span class="tag tag-imp">Improvement IV</span>
             </div>
-            <p class="panel-note">sn = Poseidon(electionId, ckHashₑ, sk<sub>id</sub>, σₑ) · Groth16 proof for R<sub>vote</sub></p>
-            <div id="candidateList" class="candidate-list">
-              <span class="dim">loading candidates…</span>
+            <p class="panel-note">sn = Poseidon(eId, ckHash, sk<sub>id</sub>, σₑ) · Groth16 R<sub>vote</sub></p>
+            <div id="candidateList" class="candidate-list"><span class="dim">init election first</span></div>
+            <div class="form-row mt">
+              <button class="btn" id="castBtn" disabled>CAST VERIFIED VOTE</button>
+              <button class="btn btn-outline" id="verifyBtn" disabled>VERIFY RECEIPT</button>
             </div>
-            <div class="form-row">
-              <button type="button" class="btn" id="castBtn" disabled>CAST VERIFIED VOTE</button>
-              <button type="button" class="btn btn-outline" id="verifyBtn" disabled>VERIFY RECEIPT</button>
-            </div>
-            <div id="voteOutput" class="output-box hidden"></div>
+            <div id="voteOut" class="output-box hidden"></div>
           </section>
 
-          <!-- Step 4: Audit -->
-          <section class="panel">
-            <div class="panel-header">
-              <span class="panel-icon step-num">4</span>
-              <h2>Censorship Audit</h2>
-              <span class="tag tag-imp">Improvement V</span>
-            </div>
-            <p class="panel-note">∀ commit ∈ log: ∃ leaf ∈ MerkleTree(rt) matching commit? Unmatched = censorship evidence.</p>
-            <div class="form-row">
-              <button type="button" class="btn btn-alt" id="auditBtn">RUN AUDIT</button>
-              <button type="button" class="btn btn-outline" id="totalProofBtn">VERIFY π<sub>total</sub></button>
-            </div>
-            <div id="auditOutput" class="output-box hidden"></div>
-          </section>
-
-          <!-- Step 5: Tally -->
+          <!-- Tally -->
           <section class="panel">
             <div class="panel-header">
               <span class="panel-icon step-num">5</span>
-              <h2>Nullification Tally</h2>
-              <span class="tag">O(n) · Nullify(msk, cm)</span>
+              <h2>Tally</h2>
+              <span class="tag">O(n) Nullify(msk, cm)</span>
             </div>
-            <p class="panel-note">cm* = C₂ - msk·C₁ · Open<sub>null</sub>(ck*, cm*, m, 0) · fake keys → 0</p>
             <div class="form-row">
-              <button type="button" class="btn" id="tallyBtn">COMPUTE TALLY</button>
-              <button type="button" class="btn btn-outline" id="legacyTallyBtn">LEGACY TALLY</button>
+              <button class="btn" id="tallyBtn">NULLIFICATION TALLY</button>
+              <button class="btn btn-outline" id="legacyTallyBtn">LEGACY TALLY</button>
             </div>
-            <div id="tallyOutput" class="output-box hidden"></div>
-          </section>
-        </div>
-
-        <!-- ─── RIGHT: Live Log ─── -->
-        <div class="log-column">
-          <section class="panel log-panel">
-            <div class="panel-header">
-              <span class="panel-icon">▸</span>
-              <h2>Protocol Log</h2>
-              <button type="button" class="btn btn-outline btn-xs" id="clearLogBtn">CLEAR</button>
-            </div>
-            <div class="log-container" id="logContainer">
-              <div class="log-entry log-system">
-                <span class="log-time">--:--:--</span>
-                <span class="log-msg">zkVoting Protocol Dashboard initialised. Waiting for backend…</span>
-              </div>
-            </div>
+            <div id="tallyOut" class="output-box hidden"></div>
           </section>
         </div>
       </div>
     </div>
 
-    <script src="./app.js"></script>
-  </body>
+    <!-- ─── TAB 2: DATA INSPECTOR ─── -->
+    <div class="tab-pane" id="tab-inspector">
+      <div class="inspector-layout">
+        <!-- Sub-tabs -->
+        <div class="sub-tab-bar">
+          <button class="sub-tab-btn active" data-subtab="merkle">Merkle Tree</button>
+          <button class="sub-tab-btn" data-subtab="ballots">Ballot Board</button>
+          <button class="sub-tab-btn" data-subtab="raw">Raw JSON</button>
+        </div>
+
+        <div class="sub-tab-pane active" id="subtab-merkle">
+          <section class="panel">
+            <div class="panel-header">
+              <span class="panel-icon">🌲</span>
+              <h2>Merkle Tree — Bulletin Board</h2>
+              <button class="btn btn-outline btn-xs" id="refreshMerkleBtn">↻</button>
+            </div>
+            <div class="state-grid" id="merkleState">
+              <div class="state-item"><span class="state-label">Root (rt)</span><span class="state-value mono truncate" id="mkRoot">—</span></div>
+              <div class="state-item"><span class="state-label">Depth</span><span class="state-value mono" id="mkDepth">16</span></div>
+              <div class="state-item"><span class="state-label">Entries</span><span class="state-value mono" id="mkEntries">0</span></div>
+              <div class="state-item"><span class="state-label">Capacity</span><span class="state-value mono">65,536</span></div>
+            </div>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead><tr><th>#</th><th>ckHash (election-scoped)</th><th>pkid</th></tr></thead>
+                <tbody id="merkleTableBody"><tr><td colspan="3" class="dim">No entries.</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <div class="sub-tab-pane" id="subtab-ballots">
+          <section class="panel">
+            <div class="panel-header">
+              <span class="panel-icon">🗳</span>
+              <h2>Ballot Board</h2>
+              <button class="btn btn-outline btn-xs" id="refreshBallotsBtn">↻</button>
+            </div>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead><tr><th>Ballot ID</th><th>Serial Number</th><th>Status</th><th>Commitment</th><th>Action</th></tr></thead>
+                <tbody id="ballotTableBody"><tr><td colspan="5" class="dim">No ballots.</td></tr></tbody>
+              </table>
+            </div>
+            <div id="ballotInspectOut" class="output-box hidden"></div>
+          </section>
+        </div>
+
+        <div class="sub-tab-pane" id="subtab-raw">
+          <section class="panel">
+            <div class="panel-header">
+              <span class="panel-icon">{}</span>
+              <h2>Raw JSON Viewer</h2>
+            </div>
+            <div class="form-row mb">
+              <select id="rawFileSelect" class="mono-input">
+                <option value="election.json">election.json</option>
+                <option value="voters.json">voters.json</option>
+                <option value="votes.json">votes.json</option>
+                <option value="bulletinBoard.json">bulletinBoard.json</option>
+                <option value="nullifiers.json">nullifiers.json</option>
+                <option value="registrationCommits.json">registrationCommits.json</option>
+              </select>
+              <button class="btn" id="loadRawBtn">LOAD</button>
+            </div>
+            <div id="rawJsonOut" class="output-box" style="min-height:200px;max-height:500px">Select a file and click LOAD.</div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── TAB 3: AUDIT & PROOFS ─── -->
+    <div class="tab-pane" id="tab-audit">
+      <div class="sim-layout">
+        <div class="sim-col">
+
+          <!-- Censorship Audit -->
+          <section class="panel">
+            <div class="panel-header">
+              <span class="panel-icon step-num">A</span>
+              <h2>Censorship Audit</h2>
+              <span class="tag tag-imp">Improvement V</span>
+            </div>
+            <p class="panel-note">∀ commit ∈ log: ∃ leaf ∈ MerkleTree(rt)? Unmatched = censorship.</p>
+            <div class="form-row">
+              <button class="btn btn-alt" id="auditBtn">RUN AUDIT</button>
+            </div>
+            <div id="auditOut" class="output-box hidden"></div>
+          </section>
+
+          <!-- πtotal -->
+          <section class="panel">
+            <div class="panel-header">
+              <span class="panel-icon step-num">B</span>
+              <h2>π<sub>total</sub> Eligibility Proof</h2>
+              <span class="tag tag-imp">Improvement I</span>
+            </div>
+            <p class="panel-note">DLEQ Schnorr: authority proves #real_keys = nv without revealing msk.</p>
+            <div class="form-row">
+              <button class="btn" id="totalProofBtn">GENERATE & VERIFY π<sub>total</sub></button>
+            </div>
+            <div id="totalProofOut" class="output-box hidden"></div>
+          </section>
+
+          <!-- Threshold Info -->
+          <section class="panel">
+            <div class="panel-header">
+              <span class="panel-icon step-num">C</span>
+              <h2>Threshold MSK</h2>
+              <span class="tag tag-imp">Improvement II</span>
+            </div>
+            <p class="panel-note">Shamir (t,n) secret sharing of msk. Any t authorities reconstruct for tally.</p>
+            <div class="form-row">
+              <button class="btn" id="thresholdInfoBtn">SHOW THRESHOLD INFO</button>
+            </div>
+            <div id="thresholdOut" class="output-box hidden"></div>
+          </section>
+        </div>
+
+        <div class="sim-col">
+          <!-- Per-ballot Nullification -->
+          <section class="panel">
+            <div class="panel-header">
+              <span class="panel-icon step-num">D</span>
+              <h2>Ballot Nullification Inspector</h2>
+            </div>
+            <p class="panel-note">cm* = C₂ - msk·C₁ · OpenNull(ck*, cm*, m, r) → real or fake?</p>
+            <div class="form-row">
+              <input id="inspectBallotId" placeholder="ballot ID" class="mono-input" />
+              <button class="btn" id="inspectBallotBtn">INSPECT</button>
+            </div>
+            <div id="inspectOut" class="output-box hidden"></div>
+          </section>
+
+          <!-- Fake Key Issue -->
+          <section class="panel">
+            <div class="panel-header">
+              <span class="panel-icon step-num">E</span>
+              <h2>Issue Fake Key (Coercion Test)</h2>
+            </div>
+            <p class="panel-note">KeyGen(mpk, msk, 0) → fake ck. Ballot tallies as zero. Indistinguishable from real.</p>
+            <div class="form-row">
+              <button class="btn btn-danger" id="fakeKeyBtn" disabled>ISSUE FAKE KEY FOR ACTIVE VOTER</button>
+            </div>
+            <div id="fakeKeyOut" class="output-box hidden"></div>
+          </section>
+
+          <!-- SimKeyProve -->
+          <section class="panel">
+            <div class="panel-header">
+              <span class="panel-icon step-num">F</span>
+              <h2>Simulated Key Proof (Deniability)</h2>
+            </div>
+            <p class="panel-note">SimKeyProve: generate a simulated proof claiming a fake key is real (or vice versa).</p>
+            <div class="form-row">
+              <input id="simCkHash" placeholder="ckHash" class="mono-input" style="flex:1" />
+              <button class="btn btn-outline" style="padding:0 8px" id="fillActiveCkBtn" title="Fill Active Key">↓ FILL KEY</button>
+            </div>
+            <div class="form-row" style="margin-top:8px">
+              <select id="simClaimedBit" class="mono-input" style="width:80px"><option value="1">b=1</option><option value="0">b=0</option></select>
+              <button class="btn btn-outline" id="simProveBtn" disabled>SIM PROVE</button>
+            </div>
+            <div id="simProveOut" class="output-box hidden"></div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── TAB 4: PROTOCOL LOG ─── -->
+    <div class="tab-pane" id="tab-log">
+      <section class="panel log-panel-full">
+        <div class="panel-header">
+          <span class="panel-icon">▸</span>
+          <h2>Protocol Log</h2>
+          <div class="log-filters">
+            <button class="log-filter-btn active" data-filter="all">All</button>
+            <button class="log-filter-btn" data-filter="request">Requests</button>
+            <button class="log-filter-btn" data-filter="crypto">Crypto</button>
+            <button class="log-filter-btn" data-filter="success">Success</button>
+            <button class="log-filter-btn" data-filter="error">Errors</button>
+          </div>
+          <button class="btn btn-outline btn-xs" id="clearLogBtn">CLEAR</button>
+        </div>
+        <div class="log-container" id="logContainer">
+          <div class="log-entry log-system">
+            <span class="log-time">--:--:--</span>
+            <span class="log-msg">zkVoting Research Dashboard initialised.</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  </div><!-- /tab-content -->
+</div><!-- /dashboard -->
+
+<script src="./app.js"></script>
+</body>
 </html>

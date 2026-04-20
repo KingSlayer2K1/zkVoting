@@ -16,3 +16,7 @@ public/
 # Logs
 *.log
 
+
+.agent/
+basepaper/
+graphify-out/

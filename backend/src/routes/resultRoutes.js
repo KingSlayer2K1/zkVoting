@@ -46,7 +46,15 @@ const router = express.Router();
 async function loadElectionWithNc() {
   return readJson("election.json", {
     electionId: "1001",
-    candidates: [],
+    name: "zkVoting Enhanced Demo",
+    description: "Demonstrating improvements over the zkVoting paper",
+    candidates: [
+      { id: "1", name: "Alice" },
+      { id: "2", name: "Bob" },
+      { id: "3", name: "Charlie" },
+      { id: "4", name: "Diana" },
+      { id: "5", name: "Eve" },
+    ],
     ncSetup: null,
   });
 }

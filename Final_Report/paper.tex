@@ -744,6 +744,8 @@ Ours (Improvement II) & any $t$ of $n$ talliers (threshold) \\
 \subsection{New API Endpoints}
 
 \begin{itemize}
+  \item \texttt{POST /api/admin/reset} --- wipe data for fresh experiment (Dashboard)
+  \item \texttt{GET /api/admin/voters} --- full voter registry (Dashboard)
   \item \texttt{POST /api/register/fake-key} --- issue fake casting key
   \item \texttt{POST /api/register/sim-key-prove} --- SimKeyProve for deniability
   \item \texttt{POST /api/election/init} --- NC setup + threshold msk split
@@ -755,6 +757,26 @@ Ours (Improvement II) & any $t$ of $n$ talliers (threshold) \\
   \item \texttt{POST /api/register/commit} --- registration commitment (Improvement~V)
   \item \texttt{GET /api/register/audit} --- censorship detection audit (Improvement~V)
 \end{itemize}
+
+\subsection{Research Simulation Dashboard}
+
+To facilitate protocol evaluation and simulate diverse election scenarios, we developed a comprehensive web-based dashboard using vanilla web technologies. Designed for researchers, the interface abstracts away the underlying API complexity, allowing users to:
+\begin{itemize}
+  \item \textbf{Manage Elections:} Initialize elections with tunable parameters (threshold bounds, authority count, grace period).
+  \item \textbf{Simulate Cohorts:} Perform batch voter registration and automated ballot casting to quickly populate the system state.
+  \item \textbf{Inspect Data:} Browse the public bulletin board (Poseidon Merkle tree), encrypted ballot log, and raw backend state files in real time.
+  \item \textbf{Test Coercion Resistance:} Issue fake casting keys and generate simulated deniability proofs (\textsf{SimKeyProve}) interactively.
+  \item \textbf{Execute Audits:} Trigger complex cryptographic events such as $\pi_{\text{total}}$ verification, multi-authority threshold tallies, and nullification-based censorship audits with a single click.
+\end{itemize}
+
+The dashboard maintains a real-time protocol log, capturing every cryptographic operation, API request, and state transition, thereby significantly simplifying the evaluation of the protocol's E2E verifiability and coercion-resistance guarantees.
+
+% Uncomment and add a screenshot of the dashboard named 'dashboard.png' into the Final_Report folder.
+% \begin{figure}[htbp]
+% \centerline{\includegraphics[width=\columnwidth]{dashboard.png}}
+% \caption{The zkVoting Research Simulation Dashboard displaying protocol state, interactive voter sessions, and the real-time cryptographic log.}
+% \label{fig:dashboard}
+% \end{figure}
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Security Analysis of Improvements}
@@ -887,6 +909,25 @@ from the current prototype.
 These contributions together produce a prototype that satisfies all eight
 security properties in Table~\ref{tab:security} and surpasses the original
 zkVoting paper on six additional dimensions.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section*{Responsible Disclosure of AI Assistance}
+\label{sec:disclosure}
+% ─────────────────────────────────────────────────────────────────────────────
+
+In the interest of academic transparency, the authors disclose the use of
+Large Language Models (LLMs) and agentic AI tools during the development
+of this project. AI assistance was utilized primarily to accelerate the
+rapid prototyping of the web dashboard (HTML/CSS layout generation and DOM
+scripting), scaffolding the Express.js backend boilerplate, and to keep documentation.
+
+All core cryptographic logic, including the circomlibjs nullifiable
+commitment implementations, the zero-knowledge circuit modifications
+in \texttt{enhanced\_vote.circom}, and the theoretical assumption analysis
+were meticulously designed, directed, and mathematically checked by the primary
+authors. The inclusion of AI-assisted scripting strictly served to expedite
+empirical validation and UI construction without compromising the academic
+integrity or theoretical rigor of the core research.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \begin{thebibliography}{00}
